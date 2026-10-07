@@ -24,6 +24,13 @@
 > `scripts/write-runtime.ps1` from `deploy/topology.json` and `deploy/system.json`, committed in `deploy/runtime/` and
 > published by the build as the site's `runtime/` (see "This system's diagram" in "The runtime view"). The view also
 > knows **asleep** here: a stopped cluster's diagram is calm, not red.
+>
+> The **"Code" card** shows for tdd, uat and prod: `deploy/topology.json` names `buildPath` `/_build`, where the app
+> answers the record its Codefresh release build wrote into the image (see "Code: the build a deployable runs"; app
+> issue [#79](https://github.com/clearmeasure-aisf-sample-apps/20260923-001/issues/79)). The build's run is a Codefresh
+> build, not a GitHub Actions run. A usual release has no number for the acceptance tests and for Qodana (the pull
+> request's build ran them, the release build did not), and the card then leaves them out; an image without a record
+> answers its version alone. The app allows this page's origin with its own CORS policy, as for `/_healthcheck`.
 
 A static web page that shows the health of every node of a multi-region system. It is a Blazor WebAssembly
 application (.NET 10, standalone): the browser itself calls the health endpoint of every node, so the dashboard needs
