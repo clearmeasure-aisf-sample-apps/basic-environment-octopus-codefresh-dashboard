@@ -1,0 +1,111 @@
+{
+  "comment": "What deploy/topology.json does not say about where this system runs. scripts/write-runtime.ps1 reads both and renders deploy/runtime/ (the runtime view's diagrams). Every value is a fact of the system repository; README, 'This system's diagram', names the file each one comes from. After a change: pwsh scripts/write-runtime.ps1, and commit the result.",
+  "subscription": "Azure subscription",
+  "delivery": {
+    "octopus": {
+      "name": "Octopus Deploy",
+      "description": "project workorders",
+      "pins": "pins the image tags"
+    },
+    "repository": {
+      "name": "basic-environment-octopus-codefresh",
+      "description": "GitHub repository, branch main",
+      "pinFile": "envs/<env>/app/kustomization.yaml"
+    }
+  },
+  "clusters": [
+    {
+      "name": "aks-platform-nonprod",
+      "resourceGroup": "rg-platform-nonprod-aks",
+      "region": "southcentralus",
+      "dataResourceGroup": "rg-platform-nonprod-data",
+      "gateway": {
+        "name": "platform-gateway",
+        "namespace": "platform-ingress",
+        "product": "Envoy Gateway",
+        "publicIp": "pip-platform-nonprod-ingress"
+      },
+      "argocd": {
+        "name": "argocd-nonprod",
+        "namespace": "argocd",
+        "polls": "every 30 s"
+      }
+    },
+    {
+      "name": "aks-platform-prod",
+      "resourceGroup": "rg-platform-prod-aks",
+      "region": "southcentralus",
+      "dataResourceGroup": "rg-platform-prod-data",
+      "gateway": {
+        "name": "platform-gateway",
+        "namespace": "platform-ingress",
+        "product": "Envoy Gateway",
+        "publicIp": "pip-platform-prod-ingress"
+      },
+      "argocd": {
+        "name": "argocd-prod",
+        "namespace": "argocd",
+        "polls": "every 30 s"
+      }
+    }
+  ],
+  "workloads": {
+    "web": {
+      "name": "ui-server",
+      "kind": "Deployment",
+      "description": "Blazor host and API",
+      "route": "HTTPRoute ui-server",
+      "port": 8080
+    },
+    "worker": {
+      "name": "worker",
+      "kind": "Deployment",
+      "description": "NServiceBus endpoint",
+      "usesDatabase": "SQL Server transport",
+      "callsWeb": "calls the API"
+    },
+    "database": {
+      "name": "db",
+      "kind": "StatefulSet",
+      "replicas": 1,
+      "description": "SQL Server 2022 Express",
+      "port": 1433
+    },
+    "applications": [
+      "workorders-app-<env>",
+      "workorders-db-<env>"
+    ]
+  },
+  "environments": [
+    {
+      "name": "tdd",
+      "namespace": "workorders-tdd",
+      "webReplicas": 1,
+      "workerReplicas": 1,
+      "disk": {
+        "name": "disk-workorders-tdd-db",
+        "sizeGiB": 8
+      }
+    },
+    {
+      "name": "uat",
+      "namespace": "workorders-uat",
+      "webReplicas": 1,
+      "workerReplicas": 0,
+      "disk": {
+        "name": "disk-workorders-uat-db",
+        "sizeGiB": 8
+      }
+    },
+    {
+      "name": "prod",
+      "namespace": "workorders-prod",
+      "webReplicas": 1,
+      "workerReplicas": 0,
+      "disk": {
+        "name": "disk-workorders-prod-db",
+        "sizeGiB": 32
+      }
+    }
+  ]
+}

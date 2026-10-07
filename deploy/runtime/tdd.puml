@@ -1,0 +1,46 @@
+@startuml
+!pragma layout smetana
+!include <C4/C4_Deployment>
+LAYOUT_TOP_DOWN()
+HIDE_STEREOTYPE()
+SHOW_PERSON_OUTLINE()
+skinparam wrapWidth 300
+skinparam maxMessageSize 220
+skinparam nodesep 30
+skinparam ranksep 40
+UpdateElementStyle("container", $bgColor="#607d8b", $fontColor="#ffffff", $borderColor="#455a64")
+UpdateElementStyle("person", $bgColor="#37474f", $fontColor="#ffffff", $borderColor="#263238")
+AddBoundaryTag("scope", $bgColor="#ffffff", $fontColor="#263238", $borderColor="#78909c", $borderStyle=DottedLine())
+AddNodeTag("region", $bgColor="#fafafa", $fontColor="#37474f", $borderColor="#90a4ae", $borderStyle=DashedLine())
+AddNodeTag("plan", $bgColor="#ffffff", $fontColor="#37474f", $borderColor="#b0bec5")
+AddElementTag("static", $bgColor="#eceff1", $fontColor="#263238", $borderColor="#90a4ae")
+AddRelTag("delivery", $textColor="#607d8b", $lineColor="#b0bec5", $lineStyle=DashedLine())
+UpdateRelStyle($textColor="#455a64", $lineColor="#78909c")
+
+Person(browser, "Browser", "a user, or this dashboard")
+Container(octopus, "Octopus Deploy", "project workorders", $tags="static")
+Container(repo, "basic-environment-octopus-codefresh", "GitHub repository, branch main", $tags="static")
+Boundary(sub, "Azure subscription", $type="subscription", $tags="scope") {
+  Boundary(rg_aks, "rg-platform-nonprod-aks", $type="resource group", $tags="scope") {
+    Deployment_Node(aks, "aks-platform-nonprod", "AKS cluster, southcentralus: hosts tdd, uat", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUoAAAAWCAYAAACmEtU9AAAAM0lEQVR42u3BAQ0AAADCoPdPbQ43oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeDHGGAAHYgpdeAAAAAElFTkSuQmCC>", $tags="plan") {
+      Container(argocd, "argocd-nonprod", "Argo CD in namespace argocd: Applications workorders-app-tdd, workorders-db-tdd", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPoAAAAuCAYAAAABQwQEAAAAQ0lEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4GWz3gABsYbbhAAAAABJRU5ErkJggg==>")
+      Deployment_Node(ns_app, "workorders-tdd", "namespace: deployable workorders", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAL4AAAAWCAYAAAB+OyYeAAAAJklEQVR42u3BAQEAAACCIP+vbkhAAQAAAAAAAAAAAAAAAAAAADwYQWYAAUAsKwYAAAAASUVORK5CYII=>", $tags="region") {
+        Container(web, "ui-server", "Deployment, 1 replica: Blazor host and API", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPoAAABiCAYAAAB52c4TAAAAdklEQVR42u3BMQEAAADCoPVPbQdvoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXgN/QQABuAm3gQAAAABJRU5ErkJggg==>")
+        Container(worker, "worker", "Deployment, 1 replica: NServiceBus endpoint", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPoAAAAuCAYAAAABQwQEAAAAQ0lEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4GWz3gABsYbbhAAAAABJRU5ErkJggg==>")
+        ContainerDb(db, "db", "StatefulSet, 1 replica: SQL Server 2022 Express", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPoAAAAuCAYAAAABQwQEAAAAQ0lEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4GWz3gABsYbbhAAAAABJRU5ErkJggg==>")
+      }
+      Container(gateway, "platform-gateway", "Envoy Gateway in namespace platform-ingress, public IP pip-platform-nonprod-ingress", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPoAAAAuCAYAAAABQwQEAAAAQ0lEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4GWz3gABsYbbhAAAAABJRU5ErkJggg==>")
+    }
+  }
+  ContainerDb(disk, "disk-workorders-tdd-db", "managed disk, 8 GiB, in resource group rg-platform-nonprod-data", $tags="static")
+}
+Rel(browser, gateway, "HTTPS", "workorders-tdd.20-114-71-237.sslip.io")
+Rel(gateway, web, "HTTPRoute ui-server", "HTTP 8080")
+Rel(web, db, "reads and writes", "TCP 1433")
+Rel(worker, db, "SQL Server transport", "TCP 1433")
+Rel(worker, web, "calls the API", "HTTP 8080")
+Rel(db, disk, "data volume", "CSI disk")
+Rel(octopus, repo, "pins the image tags", "commit to envs/tdd/app/kustomization.yaml", $tags="delivery")
+Rel(argocd, repo, "polls", "every 30 s", $tags="delivery")
+Rel(argocd, web, "syncs the namespace", $tags="delivery")
+@enduml

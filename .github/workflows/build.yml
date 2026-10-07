@@ -1,7 +1,10 @@
 # Build of the health dashboard (a Blazor WebAssembly site): compile with warnings as errors, run the unit tests,
 # publish the static site and keep it as the artifact dashboard-site (the content of the published wwwroot folder,
 # index.html at its root). A push to main also deploys the site to GitHub Pages, with this system's topology
-# (deploy/topology.json) next to index.html and the base address of the repository's Pages site.
+# (deploy/topology.json) next to index.html, this system's runtime diagrams (deploy/runtime/) as runtime/ and the base
+# address of the repository's Pages site.
+# The diagrams are rendered by scripts/write-runtime.ps1 and committed; this workflow renders nothing. The unit tests
+# fail when deploy/runtime/ is not what that script wrote from the current sources (deploy/runtime.sha256).
 # The version is MAJOR_VERSION.MINOR_VERSION.<run number>.
 name: Build
 
@@ -53,14 +56,18 @@ jobs:
           path: publish/wwwroot
           if-no-files-found: error
 
-      # The Pages site lives below /<repository>/, and it carries this system's topology instead of the sample.
+      # The Pages site lives below /<repository>/, and it carries this system's topology and runtime diagrams instead
+      # of the samples.
       - name: Prepare the Pages site
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
           cp deploy/topology.json publish/wwwroot/topology.json
-          # The runtime view's files in the source are another system's sample; this system has none yet.
+          # The runtime view's files in the source are another system's sample: all of it goes, and this system's
+          # rendered diagrams (deploy/runtime, checked by the unit tests above) take its place.
           rm -rf publish/wwwroot/runtime
+          cp -r deploy/runtime publish/wwwroot/runtime
+          test -s publish/wwwroot/runtime/index.json
           sed -i "s|<base href=\"/\" />|<base href=\"/${GITHUB_REPOSITORY#*/}/\" />|" publish/wwwroot/index.html
           grep -q "<base href=\"/${GITHUB_REPOSITORY#*/}/\" />" publish/wwwroot/index.html
           touch publish/wwwroot/.nojekyll

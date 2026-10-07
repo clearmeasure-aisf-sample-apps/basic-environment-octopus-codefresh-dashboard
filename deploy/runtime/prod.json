@@ -1,0 +1,92 @@
+{
+  "environment": "prod",
+  "svg": "prod.svg",
+  "nodes": [
+    {
+      "alias": "browser",
+      "qualifiedName": "browser",
+      "kind": "person",
+      "name": "Browser"
+    },
+    {
+      "alias": "gateway",
+      "qualifiedName": "sub.rg_aks.aks.gateway",
+      "kind": "gateway",
+      "name": "platform-gateway",
+      "url": null
+    },
+    {
+      "alias": "web",
+      "qualifiedName": "sub.rg_aks.aks.ns_app.web",
+      "kind": "webapp",
+      "deployable": "workorders",
+      "name": "ui-server",
+      "region": "southcentralus",
+      "regionAlias": "ns_app",
+      "url": "https://workorders-prod.20-225-152-33.sslip.io"
+    },
+    {
+      "alias": "worker",
+      "qualifiedName": "sub.rg_aks.aks.ns_app.worker",
+      "kind": "workload",
+      "name": "worker",
+      "regionAlias": "ns_app",
+      "url": null
+    },
+    {
+      "alias": "db",
+      "qualifiedName": "sub.rg_aks.aks.ns_app.db",
+      "kind": "sql",
+      "name": "db",
+      "regionAlias": "ns_app",
+      "url": null
+    },
+    {
+      "alias": "argocd",
+      "qualifiedName": "sub.rg_aks.aks.argocd",
+      "kind": "workload",
+      "name": "argocd-prod",
+      "url": null
+    }
+  ],
+  "regions": [
+    {
+      "alias": "aks",
+      "qualifiedName": "sub.rg_aks.aks",
+      "name": "aks-platform-prod",
+      "roles": [
+        "cluster"
+      ]
+    },
+    {
+      "alias": "ns_app",
+      "qualifiedName": "sub.rg_aks.aks.ns_app",
+      "name": "workorders-prod",
+      "roles": [
+        "namespace"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "browser-to-gateway",
+      "from": "browser",
+      "to": "gateway",
+      "kind": "public"
+    },
+    {
+      "id": "gateway-to-web",
+      "from": "gateway",
+      "to": "web",
+      "kind": "route"
+    },
+    {
+      "id": "web-to-db",
+      "from": "web",
+      "to": "db",
+      "kind": "sql"
+    }
+  ],
+  "generated": "2026-10-07T03:01:21Z",
+  "plantuml": "1.2026.8"
+}

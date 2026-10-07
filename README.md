@@ -18,6 +18,12 @@
 > are decided"). There is no collector inside the clusters, so the page knows a cluster only by what Azure says about
 > it: workflow `cluster-status` of this repository publishes that every ten minutes (see "The publisher: workflow
 > `cluster-status`"). It needs an identity in Azure, and does nothing until its three variables are set.
+>
+> And the **runtime view** is this system's own: the kit renders `runtime/` when it deploys a system it built (App
+> Service, Front Door, Azure SQL), and this system is none of those. Its diagrams are rendered by
+> `scripts/write-runtime.ps1` from `deploy/topology.json` and `deploy/system.json`, committed in `deploy/runtime/` and
+> published by the build as the site's `runtime/` (see "This system's diagram" in "The runtime view"). The view also
+> knows **asleep** here: a stopped cluster's diagram is calm, not red.
 
 A static web page that shows the health of every node of a multi-region system. It is a Blazor WebAssembly
 application (.NET 10, standalone): the browser itself calls the health endpoint of every node, so the dashboard needs
@@ -80,6 +86,10 @@ system repository to see them (and allow `http://localhost:5210` in the nodes' C
 names no cluster, so it has no Cluster tab: a topology takes absolute addresses only, and the sample would have none
 to give for the cluster's two files. To see the view, add a `cluster` (or `clusters`) to the sample with the addresses
 of a real cluster's files, or of two files a local server serves (the tests' copies are `src/Dashboard.Tests/Samples/`).
+
+To see this system's page instead of the sample, do what the build does for the Pages site: publish (below), then put
+`deploy/topology.json` in `publish/wwwroot` as `topology.json` and `deploy/runtime/` in place of its `runtime/`, and
+serve the folder. From an origin the nodes do not allow, every node is Unreachable (see "CORS").
 
 ```
 dotnet build -c Release     # warnings are errors
@@ -272,12 +282,93 @@ not its pin and is ignored.
 
 ## The runtime view
 
-The runtime view shows one environment as a C4 deployment diagram: the Azure subscription, the resource groups (the
-tier's, and the Front Door's), the regions (primary, standby, and the region of the database and of the static
-sites), the App Service plans with their size, the web apps, the Front Door endpoint, the Azure SQL database, the
-dashboard's Static Web App and the browser, with the relationships between them. One button per environment selects
-the diagram; "Fit to width" fits it to the page (down to three quarters of its size; below that, and at its actual
-size, it scrolls sideways inside its own frame). The diagram is a light sheet in the dark theme too.
+The runtime view shows one environment as a C4 deployment diagram. For a system of the kit's App Service stack that
+is: the Azure subscription, the resource groups (the tier's, and the Front Door's), the regions (primary, standby, and
+the region of the database and of the static sites), the App Service plans with their size, the web apps, the Front
+Door endpoint, the Azure SQL database, the dashboard's Static Web App and the browser, with the relationships between
+them (the sample in `src/Dashboard/wwwroot/runtime/` is such a system). For this repository's system it is what
+"This system's diagram" below describes. One button per environment selects the diagram; "Fit to width" fits it to
+the page (down to three quarters of its size; below that, and at its actual size, it scrolls sideways inside its own
+frame). The diagram is a light sheet in the dark theme too.
+
+### This system's diagram
+
+One diagram per environment (tdd, uat, prod), each drawn top down:
+
+| Element | Drawn as | The fact, and where the system repository says it |
+|---|---|---|
+| Browser | Person | A user, or this dashboard: the page's checks take the same way in. |
+| Azure subscription, resource group, AKS cluster | Frames: `rg-platform-<tier>-aks`, `aks-platform-<tier>` ("AKS cluster, southcentralus: hosts tdd, uat") | `docs/runbooks/sleep-and-wake.md` (which cluster carries which environment), `design/diagrams/c4-2-deployment-azure.puml` (resource groups), `terraform/**/<tier>.tfvars` (`location`). The cluster and its environments are also `clusters[]` of `deploy/topology.json`. |
+| `platform-gateway` | Box: "Envoy Gateway in namespace platform-ingress, public IP pip-platform-<tier>-ingress" | `gitops/platform/ingress/base/gateway.yaml` and `overlays/<tier>/kustomization.yaml`. The browser reaches it over HTTPS at `workorders-<env>.<ip-dashed>.sslip.io` (`gitops/platform/tenant/values-<tier>.yaml`, `appsDomain`; the node's `url` in `deploy/topology.json`). |
+| Namespace `workorders-<env>` | Frame: "namespace: deployable workorders" | `gitops/apps/workorders/envs/<env>/app/config/kustomization.yaml` (`namespace`). |
+| `ui-server` | Box: "Deployment, 1 replica: Blazor host and API"; the node the page checks | `gitops/apps/workorders/app/base/ui-server.yaml`; the gateway routes to it by `HTTPRoute ui-server` on HTTP 8080 (`app/base/network.yaml`). |
+| `worker` | Box: "Deployment, 1 replica: NServiceBus endpoint" in tdd, "0 replicas" in uat and prod | `app/base/worker.yaml`, and the `replicas` patch of each `envs/<env>/app/config/kustomization.yaml`. It uses the database (SQL Server transport, TCP 1433) and calls `ui-server` (`RemotableBus__ApiUrl`, HTTP 8080). |
+| `db` | Cylinder: "StatefulSet, 1 replica: SQL Server 2022 Express", inside the namespace | `envs/<env>/db/kustomization.yaml` and `gitops/platform/components/db/mssql-2022-express/db.yaml`: a pod in the cluster, not an Azure database. `ui-server` reads and writes it at `db:1433`. |
+| `disk-workorders-<env>-db` | Cylinder outside the cluster: "managed disk, 8 GiB (prod: 32 GiB), in resource group rg-platform-<tier>-data" | `DB_VOLUME` of the `db` overlay, `gitops/platform/tenant/templates/persistentvolumes.yaml` and `values.yaml` (`diskGiB`). It outlives a stopped cluster. |
+| `argocd-<tier>` | Box: "Argo CD in namespace argocd: Applications workorders-app-<env>, workorders-db-<env>" | `argocd/bootstrap/values-<tier>.yaml` (instance name, `timeout.reconciliation: 30s`), `gitops/platform/tenant/templates/applications.yaml`. It polls the repository and syncs the namespace. |
+| Octopus Deploy, the repository | Light boxes outside Azure, dashed lines | Octopus Deploy (project workorders) pins the image tags by a commit to `envs/<env>/app/kustomization.yaml` on `main`: the file `pinUrl` of the topology reads. |
+
+Not drawn, because this system has none: a Front Door, App Service plans, a standby region, a Static Web App. Left
+out although the system repository has them, to keep the diagram about what serves a request: the container registry,
+the Key Vaults behind External Secrets, the PreSync migration Job, the Octopus workers and the other platform
+namespaces.
+
+**What is live.** The page checks one address per environment, the one the gateway routes to `ui-server`:
+
+| Element | Kind in the manifest | What it shows |
+|---|---|---|
+| `ui-server` | `webapp` | Everything a web app shows (below): state, HTTP status, latency, version next to the pinned one, "serves traffic" or "not serving", the last 30 checks. |
+| Namespace | a region | "serving traffic" (green frame) or "not serving" (red frame), by the node. |
+| `db` | `sql` | "Reachable" when the node's health check passes: `/_healthcheck` of this app runs the check `DataAccess`, which connects to the database, and answers HTTP 503 when it fails. "Not confirmed" otherwise. This system's `alivePath` is the same path, so the Liveness probe says as much as the health check. |
+| `platform-gateway` | `gateway` | "Reachable" when the node's check passes, because that check went through it; "Not confirmed" when it does not (the gateway or the app may be the cause). The page does not check the gateway on its own. |
+| `worker`, `argocd-<tier>` | `workload` | "Not probed": no address a browser can call. |
+| Browser to gateway, gateway to `ui-server`, `ui-server` to `db` | `public`, `route`, `sql` | Green while the node is healthy, dashed red while it is not. No number lines: this app reports no calls per minute (`telemetryPath` is `null`), so the generator draws no slot for them. |
+| The disk, Octopus Deploy, the repository, the worker's and the delivery's lines | not in the manifest | Drawn, never updated. |
+
+**Asleep.** The view takes the health view's decision (`ClusterSleep`; see "Asleep" in "How the states are decided"):
+while Azure's facts say the environment's cluster is stopped, a node that does not answer is asleep, and while none
+of the environment's endpoints answers, so is everything drawn inside the cluster's frame. Nothing is red:
+
+| Element | Awake and silent, as before | Asleep |
+|---|---|---|
+| `ui-server` | Grey box with black dots, the cross and "Unreachable", "no answer", "not serving". | Slate box with a long dash, the crescent and "Asleep", "no answer, as expected", and as its last line "cluster aks-platform-nonprod is stopped". Its tooltip has the health view's sentences: "No answer, as expected: cluster aks-platform-nonprod is stopped." and "Azure reports the power state Stopped, as of 20:40:04 (5 min ago). Nothing answers from inside a stopped cluster: that is expected, not a failure." |
+| `db`, `platform-gateway`, `worker`, `argocd-<tier>` | "Not confirmed", "Not probed". | "Asleep", "cluster aks-platform-nonprod is stopped". |
+| The cluster's frame | No words. | Slate frame with a long dash and the health view's banner: "Asleep: cluster aks-platform-nonprod is stopped". |
+| The namespace's frame | Red, "not serving". | Slate, "asleep" (the health view's chip). |
+| The three live lines | Dashed red, "Down". | Dotted grey, as an idle line; tooltip "Asleep: nothing answers from inside a stopped cluster, and that is expected." |
+
+A node that answers is never asleep, and then nothing else is: a cluster that was just woken reads as awake with the
+first answer. The disk and the delivery outside the cluster's frame stay as drawn. The history strip keeps the checks'
+own states (stubs for "no answer").
+
+**Rendering it again.** The diagrams are rendered on a workstation and committed; the build renders nothing:
+
+```
+pwsh -NoProfile -File scripts/write-runtime.ps1          # deploy/runtime/ and deploy/runtime.sha256
+pwsh -NoProfile -File scripts/write-runtime.ps1 -Check   # nothing rendered: are they current?
+```
+
+- **Sources**: `deploy/topology.json` (the environments in their order, the deployable with its node's address, the
+  cluster that hosts each environment, and whether the app reports calls per minute) and `deploy/system.json` (what
+  the topology does not say: resource groups, region, namespaces, workloads with their replicas, the gateway, Argo
+  CD, the disks). `system.json` is a description kept by hand: when one of the files in the table above changes in
+  the system repository, change it here and render again.
+- **Renderer**: PlantUML 1.2026.8 (the version the kit and the system repository's own diagrams pin), layout engine
+  smetana (built into PlantUML: no Graphviz). The script downloads the jar from Maven Central once, into
+  `~/.cache/platform-diagrams`, and refuses a jar whose SHA-256 is not the pinned one; `PLANTUML_JAR` or
+  `-PlantUmlJar` names a jar that is already there. It needs Java 11 or later.
+- **Checked at render time**: every node, frame and relationship of each manifest is in its SVG, with its slot (see
+  "What the page relies on in the SVG"); a missing one fails the script.
+- **Kept from drifting**: `deploy/runtime.sha256` lists the SHA-256 of the three sources (the two files and the
+  script) and of every rendered file, in the format of `sha256sum`. The unit test
+  `TheRenderedFilesAreWhatTheScriptWroteFromTheCurrentSources` recomputes them, so the build fails when a source
+  changed without a new render, or when a rendered file was edited, added or removed by hand. The build then copies
+  `deploy/runtime/` into the site as `runtime/` (in place of the sample's), so what is published is what the tests
+  read. Rendering in the build instead would need Java, a download and the same checks in every run, and the tests
+  could not read the diagram they publish.
+
+The rest of this section is the kit's description of the view, which holds for this system too; where it says "the
+deployment", read "the script" here.
 
 **Drawn when the dashboard was deployed** (static): the resources, their names, sizes, regions and relationships. The
 deployment renders the diagram with PlantUML from `system.json` and the topology, so a change to the environments, a
@@ -297,6 +388,9 @@ diagram in place:
 | Database | The browser cannot ask the database, but a web app's health check connects to it: "Reachable" (healthy) when the health check of a web app that uses it passes, with the queries per minute its web apps' traffic causes (the background ones are in the tooltip); "Not confirmed" (neutral) when none passes, since the web app may be the cause; "Not probed" (neutral) with the Liveness probe, which leaves the database alone. |
 | Links | Where the topology has a link (see "Links"): a web app's badge (Live Metrics), its name (the web app in the portal), its version (the release in Octopus Deploy, or else the commit of its build), its requests (Performance) and its errors (Failures); the Front Door endpoint's and the database's name; the numbers on the arrows (Performance, the dependency calls, the requests in Logs). They are real `a` elements: underlined, in the order of the keyboard, each with a title that says where it goes. |
 | Static site | Neutral, "Not probed": the dashboard does not check itself. The static site that serves the page says "This page". |
+| Gateway (in a cluster) | The public address of the web apps it routes to: "Reachable" (healthy) when the check of one of them passes, since it went through the gateway; "Not confirmed" (neutral) when none passes; "Not probed" without a checked web app behind it. |
+| Workload (in a cluster) | Neutral, "Not probed", "no address a browser can call". |
+| Anything inside a stopped cluster | "Asleep" (see "This system's diagram"): a checked node that does not answer, and with it the cluster's frame, the namespace, the database, the gateway, the workloads and the lines into them. |
 
 A state is never colour alone: the badge has an icon and a word, the regions a word, the lines differ in dash and
 width. Hover a node or a line for its details.
@@ -313,7 +407,7 @@ The deployment (`deploy-staticwebapp.ps1` of the system repository) writes, next
 
 | File | Content |
 |---|---|
-| `runtime/index.json` | `{ "generated": "...", "plantuml": "1.2026.8", "environments": [ { "name": "uat", "manifest": "uat.json", "svg": "uat.svg" } ] }`, in the order of `system.json`. A file name is a plain name in `runtime/`. |
+| `runtime/index.json` | `{ "generated": "...", "plantuml": "1.2026.8", "environments": [ { "name": "uat", "manifest": "uat.json", "svg": "uat.svg" } ] }`, in the order of `system.json` (here: of `deploy/topology.json`). A file name is a plain name in `runtime/`. Under the legend the page says which PlantUML rendered the diagrams and, from `generated`, when: the static part is as of then. |
 | `runtime/<env>.svg` | The diagram, rendered by PlantUML (the pinned version, layout engine smetana). |
 | `runtime/<env>.json` | The manifest: which drawn element is which (below). |
 | `runtime/<env>.puml` | The PlantUML source, for reading; the page does not load it. |
@@ -351,8 +445,17 @@ The manifest maps each element's alias to what the browser knows, so the page ne
   boundaries `sub`, `rg_edge`, `rg_tier`, `afd`, `region_primary`, `region_standby`, `region_data`, `region_static`
   (a region with two roles is one boundary, named after its first role), `plan_primary`, `plan_standby`; the nodes
   `fd_<d>`, `app_<d>_primary`, `app_<d>_standby`, `sqldb`, `swa_<d>`. A relationship's id is `<from>-to-<to>`.
-- **Kinds**: nodes `person`, `frontdoor`, `webapp`, `sql`, `staticsite`; relationships `public` (the browser to a
-  public address), `origin` (with its `priority`), `sql`, `dashboard`. An unknown kind is drawn and not updated.
+- **Kinds**: nodes `person`, `frontdoor`, `webapp`, `sql`, `staticsite`, and for a system inside a cluster `gateway`
+  (holds the public address of the web apps it routes to; never checked on its own) and `workload` (no address a
+  browser can call); relationships `public` (the browser to a public address: a checked node's, or a gateway's),
+  `origin` (with its `priority`), `sql`, `dashboard`, and `route` (a gateway to a web app; no number line). An unknown
+  kind is drawn and not updated.
+- **Cluster frames**: a region with the role `cluster` is the frame of a Kubernetes cluster. What is drawn inside it
+  (the frame's alias is a part of the element's `qualifiedName` before its own) stops with the cluster, and reads as
+  asleep while the environment does. A manifest without such a region, or without qualified names, puts nothing in a
+  cluster: only its checked nodes can be asleep. In this repository's manifests the aliases are `browser`, `gateway`,
+  `web`, `worker`, `db`, `argocd`, the frames `aks` (role `cluster`) and `ns_app` (the namespace, where `web` has its
+  `regionAlias`), and the relationships `browser-to-gateway`, `gateway-to-web`, `web-to-db`.
 - **Addresses**: `url` is the address the page checks (web app, Front Door endpoint: the same as in `topology.json`,
   which is how a node finds its checks) or, for a static site, the dashboard's address where the deployment knows it
   (its own environment's); `null` for the database, which the browser cannot probe, for a Front Door endpoint that
@@ -384,8 +487,8 @@ like any image, the page hides it and draws into its rectangle (`js/runtime.js`)
 a static site's 250 by 46, a region's 190 by 22, a relationship's 160 by 34. The script draws as many lines as a slot
 holds, so a newer page on an older diagram loses lines, never its place.
 
-**The update.** `RuntimePayloadBuilder` (plain C#, unit-tested) maps the monitor's state and the manifest to a
-payload, and `js/runtime.js` draws it. Every word and state is decided in C#; the script sets `data-rt-state` on the
+**The update.** `RuntimePayloadBuilder` (plain C#, unit-tested) maps the monitor's state, the manifest and the sleep of
+the environment's cluster (`DashboardMonitor.SleepOf`, the health view's) to a payload, and `js/runtime.js` draws it. Every word and state is decided in C#; the script sets `data-rt-state` on the
 elements and draws text and small shapes with classes, and `css/app.css` ("Runtime view") gives them their colours.
 The payload, as JSON:
 
@@ -407,8 +510,9 @@ The payload, as JSON:
 }
 ```
 
-Node states `healthy`, `unhealthy`, `unreachable`, `checking`, `neutral`; region states `serving`, `standby`, `down`,
-`checking`, `neutral`; relationship states `active`, `idle`, `down`, `checking`, `neutral`; line tones `strong`,
+Node states `healthy`, `unhealthy`, `unreachable`, `checking`, `neutral`, `asleep`; region states `serving`, `standby`,
+`down`, `checking`, `neutral`, `asleep`; relationship states `active`, `idle`, `down`, `checking`, `neutral`, `asleep`
+(drawn as an idle line); a region without a `label` draws nothing; line tones `strong`,
 `plain`, `muted`, `serving`, `ok`, `warn`, `insync`, `differs`, `unknown`. `number` is absent for a relationship
 without a number line, and "–" where no node reports calls per minute. The script reports every alias or id of the
 payload that the SVG lacks, and the view names them.
@@ -756,8 +860,10 @@ for an HTTP error), and its deployable's banner is the serving decision's. So a 
 awake with the first answer, although the facts may call it stopped for another quarter of an hour. The other way
 round there is a gap: a cluster that was just stopped shows red until the workflow has published `Stopped` and
 GitHub serves it. The states of the checks themselves do not change (the history strip, the runtime view and the
-events of earlier checks keep "Unreachable"): asleep is how the health view reads them. The runtime view does not
-know asleep; it shows such a node as unreachable.
+events of earlier checks keep "Unreachable"): asleep is how the views read them. The runtime view reads them the
+same way, by the same decision: an asleep node's tile says "Asleep", and while nothing of the environment answers,
+the cluster's frame carries the banner and everything drawn inside it is asleep (see "This system's diagram" in "The
+runtime view").
 
 **Summary.** Every tile counts as one node: the Front Door endpoints and the web apps. Unhealthy and Unreachable both
 count as not healthy. A node that is asleep is neither: it is counted on its own, and the other numbers are of the
@@ -817,7 +923,11 @@ src/Dashboard                the Blazor WebAssembly app
                              topology.json and runtime/
 src/Dashboard.Tests          xUnit tests of the health logic; Samples/ holds a cluster.json and an aks.json
 deploy/topology.json         this system's topology: three environments in two clusters
-scripts/                     write-cluster-status.ps1: Azure's facts about one cluster, as aks.json
+deploy/system.json           where this system runs, beyond the topology: the second source of the runtime diagrams
+deploy/runtime/              this system's runtime diagrams, rendered and committed: index.json, <env>.svg, .json, .puml
+deploy/runtime.sha256        the SHA-256 of the diagrams' sources and of the rendered files: a test fails when they differ
+scripts/                     write-cluster-status.ps1: Azure's facts about one cluster, as aks.json;
+                             write-runtime.ps1: renders deploy/runtime/ with PlantUML
 .github/workflows            build.yml, cluster-status.yml, secret-scan.yml
 ```
 
@@ -846,7 +956,10 @@ The site is static and expects to be served from the root of its host (`<base hr
 
 - **Build** (`.github/workflows/build.yml`): on every pull request and every push to `master`. It builds with
   warnings as errors, runs the tests, publishes the site and uploads the content of the published `wwwroot` folder as
-  the artifact `dashboard-site`. The job `Build result` is the check the default-branch ruleset requires.
+  the artifact `dashboard-site`. The job `Build result` is the check the default-branch ruleset requires. In this
+  repository a push to `main` then prepares the Pages site: `deploy/topology.json` as `topology.json`, and
+  `deploy/runtime/` as `runtime/` after the sample's `runtime/` is removed whole. It renders nothing: the tests it
+  ran before have checked that `deploy/runtime/` is current (see "This system's diagram").
 - **Release** (`.github/workflows/release.yml`): after a green Build of `master`. It zips the content of
   `dashboard-site` (`index.html` at the root of the zip) as `<SYSTEM_SLUG>-<DEPLOYABLE_NAME>.<version>.zip`, pushes
   it to the Octopus built-in feed and creates the release `<version>` of the Octopus project
