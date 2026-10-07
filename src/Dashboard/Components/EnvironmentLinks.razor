@@ -1,0 +1,30 @@
+@* Where an environment's resources are, when the topology says so: plain links that open the Azure portal in a new
+   tab. The portal asks the viewer to sign in; the dashboard itself never calls it. *@
+@if (Links is { Count: > 0 } links && Entries.Any(entry => links[entry.Key] is not null))
+{
+    <p class="resource-links" aria-label="@($"Resources of {Environment} in the Azure portal")">
+        @foreach (var (key, text) in Entries)
+        {
+            if (links[key] is { } address)
+            {
+                <a href="@address.AbsoluteUri" target="_blank" rel="noopener" title="@LinkText.For(key, Environment)">@text</a>
+            }
+        }
+    </p>
+}
+
+@code {
+    private static readonly (string Key, string Text)[] Entries =
+    [
+        (LinkSet.ApplicationInsights, "Application Insights"),
+        (LinkSet.ApplicationMap, "Application map"),
+        (LinkSet.Database, "Database"),
+        (LinkSet.ResourceGroup, "Resource group"),
+    ];
+
+    [Parameter]
+    public LinkSet? Links { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Environment { get; set; } = default!;
+}

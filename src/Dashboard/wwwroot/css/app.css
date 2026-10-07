@@ -1,0 +1,2052 @@
+/* The health dashboard's only style sheet. No framework, no web font: everything is served from the site itself.
+   Colours are roles (custom properties); the dark values replace the light ones when the viewer prefers dark.
+   A state is never colour alone: every state has an icon shape and a text label next to its colour. */
+
+:root {
+  color-scheme: light dark;
+
+  --page: #f4f4f1;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-secondary: #52514e;
+  --hairline: #e1e0d9;
+  --border: rgba(11, 11, 11, 0.12);
+  --link: #1f5fae;
+  --focus: #2a78d6;
+
+  /* Status: reserved for the states, never used as decoration. */
+  --good: #0ca30c;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --pending: #898781;
+
+  --good-wash: #e9f6e9;
+  --serious-wash: #fdeee7;
+  --critical-wash: #fbe9e9;
+
+  /* The language bar of the "Code" card: identity, not state. Five hues in a fixed order (the largest language takes
+     the first), checked as neighbours for colour-vision deficiencies in both themes; the list under the bar names
+     every language in words, so no colour has to be told apart. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-other: #898781;
+
+  --radius: 10px;
+  --gap: 1rem;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-secondary: #c3c2b7;
+    --hairline: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.12);
+    --link: #7fb2f0;
+    --focus: #3987e5;
+
+    --good-wash: #12260f;
+    --serious-wash: #33201a;
+    --critical-wash: #331a1a;
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 76rem;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 1.25rem clamp(0.75rem, 3vw, 2rem) 1.5rem;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+dl,
+dd,
+ul {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(1.35rem, 2.5vw + 0.75rem, 1.9rem);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+h3 {
+  font-size: 1rem;
+}
+
+h4 {
+  font-size: 1.05rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+a {
+  color: var(--link);
+  text-underline-offset: 0.15em;
+}
+
+/* A link keeps its colour after it was followed: the page's links are places to look, not a reading list. */
+a:visited {
+  color: var(--link);
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---------- Header ---------- */
+
+.page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.page-header__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 2rem;
+}
+
+.eyebrow {
+  color: var(--ink-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.page-header__status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.summary .state-icon {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.refresh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+  color: var(--ink-secondary);
+  font-size: 0.9rem;
+}
+
+.refresh time {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.polling {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.05rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.polling::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--pending);
+}
+
+.polling--live::before {
+  background: var(--good);
+}
+
+/* Paused and hidden: a hollow dot, so the difference from "Live" is a shape as well as a colour. */
+.polling--paused::before,
+.polling--hidden::before {
+  border: 2px solid var(--pending);
+  background: transparent;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.75rem;
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--ink-secondary);
+  font-size: 0.9rem;
+}
+
+.button,
+.field select {
+  min-height: 2.25rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.92rem;
+}
+
+.button {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button--quiet {
+  font-weight: 500;
+}
+
+.button:hover:not(:disabled),
+.field select:hover {
+  border-color: var(--ink-secondary);
+}
+
+.button:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+@media (pointer: coarse) {
+  .button,
+  .field select {
+    min-height: 2.75rem;
+  }
+}
+
+.help {
+  max-width: 62rem;
+  color: var(--ink-secondary);
+  font-size: 0.88rem;
+}
+
+/* ---------- Environments ---------- */
+
+main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.environment {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.environment__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+}
+
+.deployable {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.deployable__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem 0.9rem;
+}
+
+.deployable__header h3 {
+  padding: 0.4rem 0;
+  color: var(--ink-secondary);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* The banner and, under it, the line with the versions. */
+.deployable__status {
+  display: flex;
+  flex: 1 1 18rem;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.serving {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 1rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--pending);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 0.92rem;
+}
+
+.serving__headline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.serving__icon {
+  flex: none;
+  fill: none;
+  stroke: var(--pending);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.serving__detail,
+.serving__frontdoor {
+  color: var(--ink-secondary);
+}
+
+.serving__frontdoor {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Front Door and the nodes contradict each other: the banner is a warning whatever the nodes say. */
+.serving--disagrees {
+  border-color: var(--serious);
+  border-left-color: var(--serious);
+}
+
+.serving--disagrees .serving__frontdoor {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.serving--primary {
+  border-left-color: var(--good);
+}
+
+.serving--primary .serving__icon {
+  stroke: var(--good);
+}
+
+.serving--failedover {
+  border-color: var(--serious);
+  border-left-color: var(--serious);
+  background: var(--serious-wash);
+}
+
+.serving--failedover .serving__icon {
+  stroke: var(--ink);
+}
+
+.serving--down {
+  border-color: var(--critical);
+  border-left-color: var(--critical);
+  background: var(--critical-wash);
+}
+
+.serving--down .serving__icon {
+  stroke: var(--critical);
+}
+
+/* ---------- Versions: pinned in Git next to what the nodes run ---------- */
+
+.versions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 1rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--pending);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font-size: 0.88rem;
+}
+
+/* The words give the line its baseline, so the text after them sits on the same line; the sign is centred. */
+.versions__pinned {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  color: var(--ink);
+}
+
+.version-icon {
+  flex: none;
+  align-self: center;
+  fill: none;
+  stroke: var(--pending);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.version-icon--insync {
+  stroke: var(--good);
+}
+
+.version-icon--differs {
+  stroke: var(--ink);
+}
+
+.versions--insync {
+  border-left-color: var(--good);
+}
+
+/* A node runs another version than the pinned one: a warning, with the words "Differs" and the not-equal sign. */
+.versions--differs {
+  border-color: var(--serious);
+  border-left-color: var(--serious);
+  background: var(--serious-wash);
+}
+
+.versions--differs .versions__detail {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* The links stay on the right while there is room, and wrap under the text on a narrow screen. */
+.versions__links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 1rem;
+  margin-left: auto;
+}
+
+.versions__links a {
+  white-space: nowrap;
+}
+
+/* An arrow marks a link that opens a new tab. */
+.versions__links a::after {
+  content: " \2197\FE0E";
+}
+
+.summary-versions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* ---------- Tiles ---------- */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17.5rem), 1fr));
+  gap: var(--gap);
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 0;
+  padding: 0.9rem 1rem 1rem;
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--pending);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.tile--healthy {
+  border-top-color: var(--good);
+}
+
+.tile--unhealthy {
+  border-top-color: var(--serious);
+}
+
+.tile--unreachable {
+  border-top-color: var(--critical);
+}
+
+.tile__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+}
+
+.tile__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.4rem;
+  margin-top: -0.25rem;
+}
+
+.tile__address {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  color: var(--ink-secondary);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.tile__name {
+  font-family: var(--font-mono);
+}
+
+.tile__detail {
+  color: var(--ink-secondary);
+  font-size: 0.82rem;
+}
+
+.chip {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--ink-secondary);
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chip--serving {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.6rem 0.15rem 0.4rem;
+  border-radius: 999px;
+  background: var(--page);
+  font-size: 0.88rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.state--healthy {
+  background: var(--good-wash);
+}
+
+.state--unhealthy {
+  background: var(--serious-wash);
+}
+
+.state--unreachable {
+  background: var(--critical-wash);
+}
+
+.state-icon {
+  flex: none;
+  fill: var(--pending);
+}
+
+.state-icon__mark {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.state-icon--healthy {
+  fill: var(--good);
+}
+
+.state-icon--unhealthy {
+  fill: var(--serious);
+}
+
+.state-icon--unhealthy .state-icon__mark {
+  stroke: #0b0b0b;
+}
+
+.state-icon--unreachable {
+  fill: var(--critical);
+}
+
+.state-icon--pending {
+  fill: none;
+}
+
+.state-icon--pending .state-icon__ring {
+  stroke: var(--pending);
+  stroke-width: 1.5;
+}
+
+.state-icon--pending .state-icon__mark {
+  stroke: var(--pending);
+  stroke-width: 2;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem 1rem;
+}
+
+.metrics dt {
+  color: var(--ink-secondary);
+  font-size: 0.76rem;
+}
+
+.metrics dd {
+  font-size: 1.02rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* The web app's own numbers under the checks: the last minute, and its process. Three narrow columns, the number with
+   a trend over two. */
+.tile__block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.tile__block-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.2rem 0.6rem;
+}
+
+.tile__label {
+  margin: 0;
+  color: var(--ink-secondary);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tile__uptime {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--ink-secondary);
+  font-size: 0.8rem;
+}
+
+/* A process that started within the last minutes: marked with the warning shape and its words, not colour alone. */
+.tile__uptime--restarted {
+  padding: 0.05rem 0.5rem 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--serious-wash);
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.tile__uptime .state-icon,
+.metrics .state-icon,
+.facts .state-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.metrics--compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem 0.75rem;
+}
+
+.metrics--compact dt {
+  font-size: 0.72rem;
+}
+
+.metrics--compact dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.1rem 0.4rem;
+  font-size: 0.94rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.metrics__wide {
+  grid-column: span 2;
+}
+
+.metrics__warn dd {
+  font-weight: 700;
+}
+
+.unit {
+  margin-left: 0.15em;
+  color: var(--ink-secondary);
+  font-size: 0.82em;
+  font-weight: 500;
+}
+
+/* A number or a name that leads somewhere: the ink of the text with the link's underline, so a tile of numbers does
+   not turn blue. The title says where it goes. */
+.deep {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--link);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.2em;
+}
+
+.deep:hover {
+  color: var(--link);
+}
+
+.deep--badge {
+  border-radius: 999px;
+  text-decoration: none;
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.deep--badge:hover {
+  color: inherit;
+  box-shadow: 0 0 0 1.5px var(--link);
+}
+
+/* ---------- Trend (sparkline) ---------- */
+
+.trend {
+  flex: none;
+  overflow: visible;
+}
+
+.trend__line {
+  fill: none;
+  stroke: var(--ink-secondary);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trend__now {
+  fill: var(--focus);
+}
+
+/* ---------- Cards: code and delivery ---------- */
+
+.facts-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+  gap: var(--gap);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.8rem 1rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.9rem;
+}
+
+.card__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.5rem;
+  font-size: 0.95rem;
+}
+
+.card__context {
+  color: var(--ink-secondary);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.card__lead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.9rem;
+  color: var(--ink-secondary);
+}
+
+.card__lead strong,
+.card__lead code {
+  color: var(--ink);
+}
+
+.card__reason {
+  color: var(--ink-secondary);
+}
+
+.code-size {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.code-size__total {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The share of each language as a part of one bar, with a gap of the surface between the parts. */
+.langbar {
+  display: flex;
+  gap: 2px;
+  height: 0.6rem;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.langbar__part {
+  flex: 1 1 0;
+  min-width: 3px;
+  background: var(--series-other);
+}
+
+.langbar__part--0 { background: var(--series-other); }
+.langbar__part--1 { background: var(--series-1); }
+.langbar__part--2 { background: var(--series-2); }
+.langbar__part--3 { background: var(--series-3); }
+.langbar__part--4 { background: var(--series-4); }
+.langbar__part--5 { background: var(--series-5); }
+
+.langbar__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.9rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+}
+
+.langbar__legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.langbar__swatch {
+  flex: none;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 2px;
+}
+
+.langbar__percent {
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.3rem 0.9rem;
+}
+
+.facts > div {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+}
+
+.facts dt {
+  color: var(--ink-secondary);
+  font-size: 0.82rem;
+}
+
+.facts dd {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.facts dd .state-icon {
+  margin-right: 0.3rem;
+  vertical-align: -0.08em;
+}
+
+.facts__warn dd {
+  font-weight: 700;
+}
+
+/* A fact of several pieces (a version and when, who and why): a gap between them, and they wrap as wholes first. */
+.facts__parts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.6rem;
+}
+
+/* The environment's resources in the Azure portal: quiet links at the end of its heading. */
+.resource-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 1rem;
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+
+.resource-links a {
+  white-space: nowrap;
+}
+
+.resource-links a::after {
+  content: " \2197\FE0E";
+}
+
+/* ---------- History strip ---------- */
+
+.history {
+  display: block;
+  width: 100%;
+  height: 1.5rem;
+  margin-top: auto;
+}
+
+.history__bar--empty {
+  fill: var(--hairline);
+}
+
+.history__bar--healthy {
+  fill: var(--good);
+}
+
+.history__bar--unhealthy {
+  fill: var(--serious);
+}
+
+.history__bar--unreachable {
+  fill: var(--critical);
+}
+
+.history__bar:hover {
+  opacity: 0.7;
+}
+
+/* ---------- Views: Health and Runtime ---------- */
+
+.views {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: -0.75rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.views__tab {
+  min-height: 2.5rem;
+  margin-bottom: -1px;
+  padding: 0.35rem 1rem;
+  border: 1px solid transparent;
+  border-bottom: 3px solid transparent;
+  border-radius: 8px 8px 0 0;
+  background: none;
+  color: var(--ink-secondary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.views__tab:hover {
+  color: var(--ink);
+}
+
+/* The current view: a heavy underline and the ink colour, not the colour alone. */
+.views__tab[aria-current="page"] {
+  border-color: var(--hairline) var(--hairline) var(--ink);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* ---------- Runtime view ---------- */
+
+.runtime {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.runtime__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+}
+
+.runtime__environments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.button--selected,
+.runtime__fit[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--page);
+}
+
+.runtime__fit {
+  margin-left: auto;
+}
+
+/* The diagram is a sheet of paper in both themes: PlantUML drew it for a light background. Wider than the page's
+   column where the window allows, and scrolling sideways inside its own frame where it does not. */
+.runtime__canvas {
+  margin-inline: calc(-1 * max(0px, min(50vw - 50% - 1rem, 25rem)));
+  padding: 0.5rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #ffffff;
+  color-scheme: light;
+}
+
+.runtime__canvas[hidden] {
+  display: none;
+}
+
+.runtime__svg svg {
+  display: block;
+  max-width: none;
+}
+
+.runtime__canvas--fit .runtime__svg svg {
+  width: 100%;
+  min-width: var(--rt-min-width, 0);
+  height: auto;
+}
+
+.runtime__missing {
+  padding: 0.4rem 0.75rem;
+  border-left: 4px solid var(--serious);
+  background: var(--serious-wash);
+  font-size: 0.9rem;
+}
+
+/* Under the diagram: the shown environment's resources, code and delivery. */
+.runtime__facts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.runtime__facts .resource-links {
+  margin-left: 0;
+}
+
+.runtime-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 2rem;
+  font-size: 0.85rem;
+}
+
+.runtime-legend ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0;
+  list-style: none;
+}
+
+.runtime-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.runtime-legend__swatch {
+  flex: none;
+  padding: 1px;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+/* The diagram's states. PlantUML writes its colours as attributes and inline styles, so these rules are !important.
+   The diagram is always light (see .runtime__canvas): these colours are not themed. Every state also has a word in
+   the diagram, and the lines differ in dash as well as colour. */
+.runtime-svg text {
+  font-family: var(--font);
+}
+
+.rt-node > .rt-box,
+.rt-node > .rt-box-line,
+.rt-region > .rt-frame,
+.rt-edge > .rt-edge-line,
+.rt-edge > .rt-edge-head {
+  transition: fill 0.3s, stroke 0.3s, stroke-width 0.3s;
+}
+
+.rt-node[data-rt-state="healthy"] > .rt-box { fill: #24609c !important; stroke: #2e7d32 !important; stroke-width: 4px !important; stroke-dasharray: none !important; }
+.rt-node[data-rt-state="unhealthy"] > .rt-box { fill: #b71c1c !important; stroke: #4a0000 !important; stroke-width: 4px !important; stroke-dasharray: 9 5 !important; }
+.rt-node[data-rt-state="unreachable"] > .rt-box { fill: #5f5f5f !important; stroke: #111111 !important; stroke-width: 4px !important; stroke-dasharray: 2 4 !important; }
+.rt-node[data-rt-state="checking"] > .rt-box { fill: #607d8b !important; stroke: #37474f !important; stroke-width: 2px !important; stroke-dasharray: 6 4 !important; }
+.rt-node[data-rt-state="neutral"] > .rt-box { fill: #455a64 !important; stroke: #263238 !important; stroke-width: 1px !important; stroke-dasharray: none !important; }
+.rt-node[data-rt-state] > .rt-box-line { stroke: rgba(255, 255, 255, 0.6) !important; }
+
+.rt-region[data-rt-state="serving"] > .rt-frame { fill: #eef7e6 !important; stroke: #2e7d32 !important; stroke-width: 2.5px !important; stroke-dasharray: none !important; }
+.rt-region[data-rt-state="standby"] > .rt-frame { fill: #f7f8f9 !important; stroke: #78909c !important; stroke-width: 1.5px !important; stroke-dasharray: 7 5 !important; }
+.rt-region[data-rt-state="down"] > .rt-frame { fill: #fdecec !important; stroke: #b71c1c !important; stroke-width: 2.5px !important; stroke-dasharray: 9 5 !important; }
+.rt-region[data-rt-state="checking"] > .rt-frame { fill: #fafafa !important; stroke: #90a4ae !important; stroke-dasharray: 3 4 !important; }
+
+.rt-edge[data-rt-state="active"] > .rt-edge-line { stroke: #2e7d32 !important; stroke-width: 3.5px !important; stroke-dasharray: none !important; }
+.rt-edge[data-rt-state="active"] > .rt-edge-head { fill: #2e7d32 !important; stroke: #2e7d32 !important; }
+.rt-edge[data-rt-state="idle"] > .rt-edge-line { stroke: #90a4ae !important; stroke-width: 1.5px !important; stroke-dasharray: 2 5 !important; }
+.rt-edge[data-rt-state="idle"] > .rt-edge-head { fill: #90a4ae !important; stroke: #90a4ae !important; }
+.rt-edge[data-rt-state="down"] > .rt-edge-line { stroke: #b71c1c !important; stroke-width: 2.5px !important; stroke-dasharray: 9 5 !important; }
+.rt-edge[data-rt-state="down"] > .rt-edge-head { fill: #b71c1c !important; stroke: #b71c1c !important; }
+.rt-edge[data-rt-state="checking"] > .rt-edge-line { stroke: #78909c !important; stroke-dasharray: 3 4 !important; }
+
+/* Tiles: drawn on the node's box, white on its colour. */
+.rt-tile text { fill: #ffffff; }
+.rt-badge__back { fill: #ffffff; }
+.rt-badge__text { font-weight: 700; }
+.rt-tile--healthy .rt-badge__text { fill: #1b5e20; }
+.rt-tile--unhealthy .rt-badge__text { fill: #b71c1c; }
+.rt-tile--unreachable .rt-badge__text { fill: #111111; }
+.rt-tile--checking .rt-badge__text,
+.rt-tile--neutral .rt-badge__text { fill: #37474f; }
+.rt-tile--healthy .rt-badge__icon .rt-icon__fill { fill: #2e7d32; }
+.rt-tile--unhealthy .rt-badge__icon .rt-icon__fill { fill: #b71c1c; }
+.rt-tile--unreachable .rt-badge__icon .rt-icon__fill { fill: #111111; }
+.rt-line--strong .rt-row__text { font-weight: 700; }
+.rt-tile .rt-line--muted .rt-row__text { fill: rgba(255, 255, 255, 0.82); }
+.rt-line--serving .rt-row__text,
+.rt-line--differs .rt-row__text,
+.rt-line--warn .rt-row__text { font-weight: 700; }
+.rt-tile .rt-line--differs .rt-row__text,
+.rt-tile .rt-line--warn .rt-row__text { fill: #ffe0b2; }
+
+.rt-icon__fill { fill: #ffffff; }
+.rt-icon__mark,
+.rt-icon__line,
+.rt-icon__ring {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.rt-icon__fill + .rt-icon__mark { stroke: #ffffff; }
+.rt-badge__icon .rt-icon__ring,
+.rt-badge__icon .rt-icon__line { stroke: #37474f; }
+.rt-row__icon .rt-icon__fill { fill: #ffffff; }
+.rt-row__icon .rt-icon__fill + .rt-icon__mark { stroke: #24609c; }
+.rt-tile--unhealthy .rt-row__icon .rt-icon__fill + .rt-icon__mark { stroke: #b71c1c; }
+.rt-line--differs .rt-icon__line,
+.rt-line--warn .rt-icon__fill { stroke: #ffe0b2; fill: none; }
+.rt-line--warn .rt-icon__fill { fill: #ffe0b2; }
+.rt-line--warn .rt-icon__mark { stroke: #b71c1c; }
+
+.rt-bar--healthy { fill: #a5d6a7; }
+.rt-bar--unhealthy { fill: #ffcc80; }
+.rt-bar--unreachable { fill: #eeeeee; }
+.rt-bar--empty { fill: rgba(255, 255, 255, 0.3); }
+
+/* A region's mark: a pill with an icon and words. */
+.rt-mark__text { fill: #37474f; font-weight: 700; }
+.rt-mark__back { fill: #eceff1; }
+.rt-mark--serving .rt-mark__back { fill: #2e7d32; }
+.rt-mark--down .rt-mark__back { fill: #b71c1c; }
+.rt-mark--serving .rt-mark__text,
+.rt-mark--down .rt-mark__text { fill: #ffffff; }
+.rt-mark--serving .rt-icon__fill,
+.rt-mark--down .rt-icon__fill { fill: #ffffff; }
+.rt-mark--serving .rt-icon__mark { stroke: #2e7d32; }
+.rt-mark--down .rt-icon__mark { stroke: #b71c1c; }
+.rt-mark--standby .rt-icon__ring,
+.rt-mark--standby .rt-icon__line,
+.rt-mark--checking .rt-icon__ring,
+.rt-mark--checking .rt-icon__line { stroke: #37474f; }
+.rt-mark--neutral .rt-mark__text { fill: #607d8b; font-weight: 400; font-style: italic; }
+
+/* Links in the diagram: real <a> elements. Underlined, because the text keeps the colour of its place; the focus ring
+   is drawn around the words. */
+.runtime-svg a.rt-link { cursor: pointer; }
+/* Chrome paints the words of a followed link inside SVG text black when their fill is inherited from outside the link
+   (white on a tile became unreadable): the fill and colour are inherited explicitly, followed or not. */
+.runtime-svg a.rt-link,
+.runtime-svg a.rt-link:visited { color: inherit; fill: inherit; }
+.runtime-svg a.rt-link text,
+.runtime-svg text a.rt-link { text-decoration: underline; text-underline-offset: 2px; }
+.runtime-svg a.rt-link:hover text,
+.runtime-svg text a.rt-link:hover { text-decoration-thickness: 2px; }
+.runtime-svg a.rt-link:focus-visible { outline: 3px solid #ffb300; outline-offset: 2px; border-radius: 3px; }
+.runtime-svg a.rt-link:focus-visible .rt-badge__back { stroke: #ffb300; stroke-width: 3px; }
+
+/* Trends: a thin line after the number, the last reading as a dot. White on a tile, slate on the sheet. */
+.rt-trend__line { fill: none; stroke: #546e7a; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.rt-trend__now { fill: #24609c; }
+.rt-trend__hit { fill: transparent; stroke: none; }
+.rt-tile .rt-trend__line { stroke: rgba(255, 255, 255, 0.85); }
+.rt-tile .rt-trend__now { fill: #ffffff; }
+.rt-edge[data-rt-state="active"] .rt-trend__line { stroke: #2e7d32; }
+.rt-edge[data-rt-state="active"] .rt-trend__now { fill: #1b5e20; }
+
+/* A relationship's number line: a dashed frame keeps the place of the number. */
+.rt-number__hook { fill: #ffffff; stroke: #78909c; stroke-width: 1; stroke-dasharray: 3 3; }
+.rt-number--counted .rt-number__hook { stroke: #455a64; stroke-dasharray: none; }
+.rt-number__text { fill: #37474f; }
+.rt-number__value { font-weight: 700; }
+.rt-number__role { fill: #546e7a; }
+.rt-edge[data-rt-state="active"] .rt-number__role,
+.rt-edge[data-rt-state="active"] .rt-number__text { fill: #1b5e20; }
+.rt-edge[data-rt-state="down"] .rt-number__role { fill: #b71c1c; }
+
+/* The legend's swatches use the same classes, at a smaller line. */
+.runtime-legend .rt-box { stroke-width: 2.5px !important; }
+.runtime-legend .rt-frame { stroke-width: 1.5px !important; }
+.runtime-legend .rt-edge-line { stroke: #78909c; }
+
+/* ---------- Cluster view ---------- */
+
+.cluster {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+/* What Azure reports next to what the cluster reports: side by side where there is room, so they can be compared. */
+.cluster__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  align-items: start;
+  gap: var(--gap);
+}
+
+.cluster-card {
+  gap: 0.7rem;
+  border-top: 4px solid var(--pending);
+}
+
+.cluster-card--healthy {
+  border-top-color: var(--good);
+}
+
+.cluster-card--warning,
+.cluster-card--unhealthy {
+  border-top-color: var(--serious);
+}
+
+.cluster-card--unreachable {
+  border-top-color: var(--critical);
+}
+
+.cluster-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+}
+
+.cluster-card__headline {
+  font-size: 1rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.cluster-card__detail {
+  margin-top: -0.35rem;
+  color: var(--ink-secondary);
+}
+
+.cluster-card__totals {
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+}
+
+.cluster-card__totals dd {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A number with a second, smaller one ("66 of 68", "1 finished"): each stays whole, and the second wraps under the first. */
+.cluster-card__totals dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.45em;
+  white-space: nowrap;
+}
+
+.cluster-card__totals .unit {
+  margin-left: 0;
+}
+
+.cluster-card__block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--hairline);
+}
+
+/* A muted note: the facts are old. Words and a rule at its side, no state colour: it is not a failure of the cluster. */
+.cluster-card__note {
+  padding-left: 0.6rem;
+  border-left: 3px solid var(--pending);
+  color: var(--ink-secondary);
+  font-size: 0.85rem;
+}
+
+.cluster-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 1rem;
+  margin-top: auto;
+  color: var(--ink-secondary);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cluster-card__link {
+  margin-left: auto;
+}
+
+.cluster-card__link::after {
+  content: " \2197\FE0E";
+}
+
+/* The states the cluster view adds to the page's badge: a warning is the triangle in a frame, without the wash of
+   Unhealthy; checking and neutral keep the page's ground. */
+.state--warning {
+  box-shadow: inset 0 0 0 1px var(--serious);
+}
+
+/* In a table's row: the icon and the word, without the pill. */
+.state--quiet {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  align-items: flex-start;
+  font-size: inherit;
+  font-weight: 600;
+  white-space: normal;
+}
+
+.state--quiet .state-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-top: 0.2rem;
+}
+
+.state-icon--neutral {
+  fill: none;
+}
+
+.state-icon--neutral .state-icon__ring {
+  stroke: var(--pending);
+  stroke-width: 1.5;
+}
+
+.state-icon--neutral .state-icon__mark {
+  stroke: var(--pending);
+  stroke-width: 2;
+}
+
+.pools {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0;
+  list-style: none;
+}
+
+.pools li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.5rem;
+}
+
+.pools__state {
+  color: var(--ink-secondary);
+}
+
+/* A meter: a share of a whole. The fill is ink, not a state colour: how much, not how good. From nine tenths on it
+   is marked with the warning colour, and the number next to it with the warning shape and its weight. */
+.meter {
+  display: block;
+  width: 100%;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--hairline);
+}
+
+.meter__fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--ink-secondary);
+}
+
+.meter--thin {
+  height: 0.25rem;
+}
+
+.meter--thin .meter__fill {
+  background: var(--pending);
+}
+
+.meter--high {
+  background: var(--serious-wash);
+}
+
+.meter--high .meter__fill {
+  background: var(--serious);
+}
+
+.uses {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: 0.8rem 1.5rem;
+}
+
+/* Azure's five small numbers: the three of the nodes in one row, the two of the API server under them. */
+.uses--small {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem 1rem;
+}
+
+.uses--small .use__value {
+  font-size: 0.94rem;
+}
+
+.use {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.use__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.5rem;
+}
+
+.use__label {
+  flex: 1 0 100%;
+  color: var(--ink-secondary);
+  font-size: 0.76rem;
+}
+
+.use__value {
+  font-size: 1.02rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.use__value .state-icon,
+.use-cell .state-icon,
+.chip .state-icon,
+.platform__warn .state-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+  vertical-align: -0.08em;
+}
+
+.use__value .state-icon,
+.use-cell .state-icon,
+.platform__warn .state-icon {
+  margin-right: 0.25rem;
+}
+
+.use--high .use__value,
+.use-cell--high .use-cell__value {
+  font-weight: 700;
+}
+
+.use__percent {
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.use__head .trend {
+  align-self: center;
+  margin-left: auto;
+}
+
+.use__sub {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--ink-secondary);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.use__sub span:last-child {
+  flex: none;
+}
+
+.cluster-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cluster-section__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 1rem;
+}
+
+/* A table of the cluster view: it scrolls sideways inside its own frame where the screen is narrow. */
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.grid th,
+.grid td {
+  padding: 0.4rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.grid thead th {
+  border-bottom: 1px solid var(--hairline);
+  color: var(--ink-secondary);
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.grid tbody th {
+  font-weight: 400;
+}
+
+.grid tbody tr + tr > * {
+  border-top: 1px solid var(--hairline);
+}
+
+.grid td {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.grid .grid__number {
+  text-align: right;
+}
+
+.grid__name {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.grid__warn {
+  font-weight: 700;
+}
+
+.grid__minor {
+  color: var(--ink-secondary);
+}
+
+.grid__chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+}
+
+/* The pods of a namespace: the same columns in every namespace's table, so a page of them reads as one list. The table
+   keeps a width its columns need and scrolls inside its frame below it. */
+.grid--pods {
+  min-width: 62rem;
+  table-layout: fixed;
+}
+
+.grid--pods thead th:nth-child(1) { width: 25%; }
+.grid--pods thead th:nth-child(2) { width: 11%; }
+.grid--pods thead th:nth-child(3) { width: 18%; }
+.grid--pods thead th:nth-child(4) { width: 8%; }
+.grid--pods thead th:nth-child(5) { width: 15%; }
+.grid--pods thead th:nth-child(6) { width: 15%; }
+.grid--pods thead th:nth-child(7) { width: 8%; }
+
+.grid--pods td:nth-child(3) {
+  white-space: normal;
+}
+
+.grid--pods .pod__name {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* On a narrow screen the kind moves under the pod's name, so the state is in view before the table is scrolled. */
+.pod__kind {
+  display: none;
+  color: var(--ink-secondary);
+  font-size: 0.76rem;
+}
+
+@media (max-width: 40rem) {
+  .grid--pods {
+    min-width: 50rem;
+  }
+
+  .grid--pods thead th:nth-child(2),
+  .grid--pods tbody td:nth-child(2) {
+    display: none;
+  }
+
+  .grid--pods thead th:nth-child(1) { width: 22%; }
+  .grid--pods thead th:nth-child(3) { width: 22%; }
+  .grid--pods thead th:nth-child(4) { width: 10%; }
+  .grid--pods thead th:nth-child(5) { width: 18%; }
+  .grid--pods thead th:nth-child(6) { width: 18%; }
+  .grid--pods thead th:nth-child(7) { width: 10%; }
+
+  .pod__kind {
+    display: block;
+  }
+}
+
+/* A finished job: there, and no concern. Muted, and its state says "Finished". */
+.grid__row--muted > * {
+  color: var(--ink-secondary);
+}
+
+.grid__row--muted .pod__workload {
+  font-weight: 500;
+}
+
+.pod {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.pod__workload {
+  font-weight: 650;
+}
+
+.pod__name {
+  color: var(--ink-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.use-cell {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 6.5rem;
+}
+
+.use-cell__none {
+  color: var(--ink-secondary);
+}
+
+.chip--warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-color: var(--serious);
+  background: var(--serious-wash);
+  color: var(--ink);
+}
+
+.namespace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.namespace__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+}
+
+.namespace__name {
+  color: var(--ink-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.namespace__summary,
+.namespace__volumes {
+  color: var(--ink-secondary);
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.namespace__label {
+  margin-right: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.namespace__platform-name {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+/* Every namespace that belongs to no environment: one line, opened by the viewer or by an unhealthy pod. */
+.platform {
+  display: flex;
+  flex-direction: column;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.platform[open] {
+  gap: 0.9rem;
+}
+
+.platform > * + * {
+  margin-top: 0.9rem;
+}
+
+.platform__summary {
+  cursor: pointer;
+}
+
+.platform__summary h4 {
+  display: inline;
+}
+
+.platform__warn {
+  margin-left: 0.6rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ---------- Messages ---------- */
+
+.empty {
+  color: var(--ink-secondary);
+}
+
+.problem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--critical);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--critical-wash);
+}
+
+.problem ul {
+  padding-left: 1.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.app-loading {
+  padding: 20vh 1rem;
+  color: var(--ink-secondary);
+  text-align: center;
+}
+
+/* ---------- Footer ---------- */
+
+/* ---------- Events: what just happened ---------- */
+
+.events {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.events__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 1rem;
+}
+
+.events__title {
+  font-size: 1rem;
+}
+
+.events__scope {
+  color: var(--ink-secondary);
+  font-size: 0.85rem;
+}
+
+.events__failover {
+  font-size: 0.9rem;
+}
+
+/* The log scrolls inside its own frame, so a long morning does not push the page down. */
+.events__log {
+  max-height: 13.5rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.events__log .empty {
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+.events__list {
+  display: grid;
+  grid-template-columns: max-content max-content max-content minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.88rem;
+}
+
+.event {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  gap: 0 0.7rem;
+  padding: 0.3rem 0.8rem;
+}
+
+.event + .event {
+  border-top: 1px solid var(--hairline);
+}
+
+.event__time {
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.event__mark {
+  align-self: center;
+  display: inline-flex;
+}
+
+.event__mark .state-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.event__where {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.event__text {
+  overflow-wrap: anywhere;
+}
+
+.event--problem .event__text,
+.event--warning .event__text {
+  font-weight: 600;
+}
+
+@media (max-width: 40rem) {
+  .events__list {
+    grid-template-columns: max-content max-content minmax(0, 1fr);
+  }
+
+  .event__text {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------- Traffic (the button at the bottom) ---------- */
+
+.traffic {
+  margin: 0 0 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--hairline);
+}
+
+.traffic__title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.traffic__status {
+  color: var(--ink-secondary);
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.page-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--hairline);
+  color: var(--ink-secondary);
+  font-size: 0.82rem;
+}
+
+/* ---------- Blazor's error bar (shown by the framework when the app fails) ---------- */
+
+#blazor-error-ui {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1000;
+  display: none;
+  padding: 0.7rem 3rem 0.8rem 1.25rem;
+  border-top: 4px solid var(--critical);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 -1px 6px rgba(0, 0, 0, 0.25);
+}
+
+#blazor-error-ui .dismiss {
+  position: absolute;
+  top: 0.45rem;
+  right: 1rem;
+  font-size: 1.3rem;
+  cursor: pointer;
+}
+
+@media (max-width: 30rem) {
+  .page-header__top {
+    align-items: flex-start;
+  }
+
+  .controls .button--quiet {
+    flex: 1 1 auto;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tile {
+    transition: border-color 0.2s ease;
+  }
+}
+
+@media (forced-colors: active) {
+  .tile,
+  .serving,
+  .versions,
+  .state {
+    border: 1px solid CanvasText;
+  }
+
+  .history__bar {
+    fill: CanvasText;
+  }
+
+  .history__bar--empty {
+    fill: GrayText;
+  }
+
+  .card,
+  .events__log,
+  .langbar__part,
+  .langbar__swatch {
+    border: 1px solid CanvasText;
+  }
+
+  .trend__line {
+    stroke: CanvasText;
+  }
+
+  .table-scroll,
+  .meter,
+  .state--warning {
+    border: 1px solid CanvasText;
+  }
+
+  .meter__fill {
+    background: CanvasText;
+  }
+}

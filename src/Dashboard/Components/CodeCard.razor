@@ -1,0 +1,132 @@
+@* The "Code" card of a deployable in an environment: the build its primary node runs, as the node itself reports it
+   (BuildInfo). Each line is there when the build measured it. Two environments that run different builds show each
+   their own. *@
+<section class="card card--code" aria-labelledby="@($"{IdPrefix}-code")">
+    <h4 class="card__title" id="@($"{IdPrefix}-code")">
+        Code
+        <span class="card__context">@Context</span>
+    </h4>
+
+    <p class="card__lead">
+        @if (Build.Version is { } version)
+        {
+            <span>build <strong>@version</strong></span>
+        }
+        @if (Build.Commit is { } commit)
+        {
+            <span>
+                commit
+                <DeepLink Href="Build.CommitUrl" Title="@LinkText.CommitTitle(commit)"><code>@BuildText.ShortCommit(commit)</code></DeepLink>
+            </span>
+        }
+        @if (Build.BuiltAt is { } built)
+        {
+            <span>built <time datetime="@TimeText.Iso(built)" title="@TimeText.DateAndTime(built, Zone)">@TimeText.Ago(built, Now)</time></span>
+        }
+        @if (Build.BuildUrl is { } run)
+        {
+            <a class="deep" href="@run.AbsoluteUri" target="_blank" rel="noopener" title="@($"The build's run{LinkText.GitHubSuffix}")">build run</a>
+        }
+    </p>
+
+    @if (Build.Code is { } code)
+    {
+        var shares = BuildText.Shares(code);
+        <div class="code-size">
+            @if (BuildText.Size(code) is { } size)
+            {
+                <p class="code-size__total">@size</p>
+            }
+            @if (shares.Count > 0)
+            {
+                @* The bar is the picture; the list under it says the same in words, so no colour has to be told apart. *@
+                <div class="langbar" role="img" aria-label="@($"Lines of code by language: {BuildText.Describe(shares)}")">
+                    @foreach (var share in shares)
+                    {
+                        <span class="langbar__part langbar__part--@share.Slot" style="flex-grow: @share.Lines.ToString(CultureInfo.InvariantCulture)"
+                              title="@($"{share.Name}: {BuildText.Count(share.Lines)} lines, {BuildText.SharePercent(share.Percent)}")"></span>
+                    }
+                </div>
+                <ul class="langbar__legend">
+                    @foreach (var share in shares)
+                    {
+                        <li title="@($"{BuildText.Count(share.Lines)} lines")">
+                            <span class="langbar__swatch langbar__part--@share.Slot" aria-hidden="true"></span>
+                            <span>@share.Name</span>
+                            <span class="langbar__percent">@BuildText.SharePercent(share.Percent)</span>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
+
+    <dl class="facts">
+        @if (Build.Tests is { } tests)
+        {
+            <div>
+                <dt>Tests</dt>
+                <dd>@BuildText.Tests(tests)</dd>
+            </div>
+        }
+        @if (Build.Coverage is { } coverage)
+        {
+            <div>
+                <dt>Coverage</dt>
+                <dd>@BuildText.Coverage(coverage)</dd>
+            </div>
+        }
+        @if (Build.Complexity is { } complexity)
+        {
+            <div>
+                <dt title="Cyclomatic complexity per method: the number of paths through it">Complexity</dt>
+                <dd>@BuildText.Complexity(complexity)</dd>
+            </div>
+        }
+        @if (Build.Crap is { } crap)
+        {
+            var over = BuildText.CrapIsOver(crap);
+            <div class="@(over ? "facts__warn" : null)">
+                <dt title="CRAP score (change risk anti-patterns) per method: complexity that tests do not cover">CRAP</dt>
+                <dd>
+                    @if (over)
+                    {
+                        <StateIcon State="HealthState.Unhealthy" />
+                    }
+                    @BuildText.Crap(crap)
+                </dd>
+            </div>
+        }
+        @if (Build.QodanaProblems is { } problems)
+        {
+            <div class="@(problems > 0 ? "facts__warn" : null)">
+                <dt title="Problems the static analysis (Qodana) reports for this build">Qodana</dt>
+                <dd>
+                    @if (problems > 0)
+                    {
+                        <StateIcon State="HealthState.Unhealthy" />
+                    }
+                    @BuildText.Problems(problems)
+                </dd>
+            </div>
+        }
+    </dl>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public BuildInfo Build { get; set; } = default!;
+
+    /// <summary>Whose code it is: the deployable and the environment whose node reported it.</summary>
+    [Parameter, EditorRequired]
+    public string Context { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public string IdPrefix { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public DateTimeOffset Now { get; set; }
+}

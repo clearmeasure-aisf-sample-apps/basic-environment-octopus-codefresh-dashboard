@@ -1,0 +1,43 @@
+@* The last checks, oldest on the left. Height says the state as well as colour: tall is healthy, half is unhealthy,
+   a stub is unreachable. Each bar names its check on hover. *@
+<svg class="history" viewBox="0 0 @Width @Height" preserveAspectRatio="none" role="img" aria-label="@HistoryText.Describe(History)">
+    @for (var slot = 0; slot < History.Capacity; slot++)
+    {
+        var index = slot - (History.Capacity - History.Count);
+        var x = slot * (BarWidth + Gap);
+        if (index < 0)
+        {
+            <rect class="history__bar history__bar--empty" x="@x" y="@(Height - 2)" width="@BarWidth" height="2" rx="1" />
+        }
+        else
+        {
+            var result = History[index];
+            var height = BarHeight(result.State);
+            <rect class="history__bar history__bar--@result.State.ToString().ToLowerInvariant()" x="@x" y="@(Height - height)"
+                  width="@BarWidth" height="@height" rx="1.5">
+                <title>@HistoryText.Describe(result, Zone)</title>
+            </rect>
+        }
+    }
+</svg>
+
+@code {
+    private const int BarWidth = 6;
+    private const int Gap = 2;
+    private const int Height = 24;
+
+    [Parameter, EditorRequired]
+    public HistoryBuffer<ProbeResult> History { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    private int Width => History.Capacity * (BarWidth + Gap) - Gap;
+
+    private static int BarHeight(HealthState state) => state switch
+    {
+        HealthState.Healthy => Height,
+        HealthState.Unhealthy => Height / 2,
+        _ => 5,
+    };
+}

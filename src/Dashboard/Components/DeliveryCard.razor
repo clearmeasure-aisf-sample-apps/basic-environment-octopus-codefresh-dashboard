@@ -1,0 +1,107 @@
+@* The "Delivery" card of a deployable in an environment: its last deployment, from the system's delivery facts
+   (DeliveryReport). Each line is there when the file says it. *@
+<section class="card card--delivery" aria-labelledby="@($"{IdPrefix}-delivery")">
+    <h4 class="card__title" id="@($"{IdPrefix}-delivery")" title="@AsOf">
+        Delivery
+        <span class="card__context">@Context</span>
+    </h4>
+
+    <dl class="facts">
+        @if (Entry.DeployedAt is not null || Entry.Version is not null)
+        {
+            <div>
+                <dt>Deployed</dt>
+                <dd class="facts__parts">
+                    @if (Entry.Version is { } version)
+                    {
+                        <DeepLink Href="Entry.ReleaseUrl" Title="@LinkText.ReleaseTitle(Entry.Name, version)"><strong>@version</strong></DeepLink>
+                    }
+                    @if (Entry.DeployedAt is { } deployed)
+                    {
+                        <time datetime="@TimeText.Iso(deployed)" title="@TimeText.DateAndTime(deployed, Zone)">@TimeText.Ago(deployed, Now)</time>
+                    }
+                </dd>
+            </div>
+        }
+        @if (Entry.SignedOffBy is not null || Entry.Reason is not null)
+        {
+            <div>
+                <dt>Signed off</dt>
+                <dd class="facts__parts">
+                    @if (Entry.SignedOffBy is { } who)
+                    {
+                        <span>by @who</span>
+                    }
+                    @if (Entry.Reason is { } reason)
+                    {
+                        <q class="card__reason">@reason</q>
+                    }
+                </dd>
+            </div>
+        }
+        @if (Entry.LeadTimeHours is { } hours)
+        {
+            <div>
+                <dt title="From the commit to this deployment">Lead time</dt>
+                <dd title="@(Entry.CommitAt is { } committed ? $"Committed {TimeText.DateAndTime(committed, Zone)}" : null)">
+                    @DeliveryText.LeadTime(hours) from commit
+                    @if (Entry.Commit is { } commit)
+                    {
+                        <code>@BuildText.ShortCommit(commit)</code>
+                    }
+                    to this deployment
+                </dd>
+            </div>
+        }
+        @if (DeliveryText.Behind(Entry.Behind, Environment, First) is { } behind)
+        {
+            <div>
+                <dt title="@DeliveryText.BehindHelp(First!)">Compared</dt>
+                <dd>@behind</dd>
+            </div>
+        }
+        @if (DeliveryText.Frequency(Entry) is { } frequency)
+        {
+            <div class="@(Entry.FailedLast7Days > 0 ? "facts__warn" : null)">
+                <dt>Last 7 days</dt>
+                <dd>
+                    @if (Entry.FailedLast7Days > 0)
+                    {
+                        <StateIcon State="HealthState.Unhealthy" />
+                    }
+                    @frequency
+                </dd>
+            </div>
+        }
+    </dl>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public DeliveryEntry Entry { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public string Environment { get; set; } = default!;
+
+    /// <summary>The first environment of the system: the one this environment is compared with.</summary>
+    [Parameter]
+    public string? First { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Context { get; set; } = default!;
+
+    /// <summary>When the delivery facts last changed (the file's <c>generated</c>): not the time of a check.</summary>
+    [Parameter]
+    public DateTimeOffset? Changed { get; set; }
+
+    private string? AsOf => Changed is { } changed ? $"Delivery facts as of the last change: {TimeText.DateAndTime(changed, Zone)}" : null;
+
+    [Parameter, EditorRequired]
+    public string IdPrefix { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public DateTimeOffset Now { get; set; }
+}

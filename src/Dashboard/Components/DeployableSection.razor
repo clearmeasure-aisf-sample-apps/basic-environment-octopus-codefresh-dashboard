@@ -1,0 +1,105 @@
+@{
+    var assessment = Deployable.Assess(out var expected);
+    var serving = assessment.State.ToString().ToLowerInvariant();
+    var disagrees = assessment.FrontDoor == FrontDoorAgreement.Disagrees;
+    var versions = Environment.AssessVersions(Deployable);
+    var logs = Deployable.Info.Links?[LinkSet.Logs];
+    var history = Environment.PinHistoryOf(Deployable);
+    var hasVersionLine = versions is not null || Deployable.Info.ProjectUrl is not null || history is not null || logs is not null;
+}
+<section class="deployable" aria-labelledby="@($"{IdPrefix}-title")">
+    <header class="deployable__header">
+        <h3 id="@($"{IdPrefix}-title")">@Deployable.Info.Name</h3>
+        <div class="deployable__status">
+            <div class="serving serving--@serving @(disagrees ? "serving--disagrees" : null)">
+                <p class="serving__headline">
+                    <svg class="serving__icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+                        @switch (assessment.State)
+                        {
+                            case ServingState.Primary:
+                                <path d="M3 8.5l3.2 3.2L13 4.6" />
+                                break;
+                            case ServingState.FailedOver:
+                                <path d="M2 5.5h11M10 2.5l3 3-3 3M14 10.5H3M6 7.5l-3 3 3 3" />
+                                break;
+                            case ServingState.Down:
+                                <path d="M4 4l8 8M12 4l-8 8" />
+                                break;
+                            default:
+                                <path d="M3.9 8h.2M7.9 8h.2M11.9 8h.2" />
+                                break;
+                        }
+                    </svg>
+                    <strong>@assessment.Headline</strong>
+                </p>
+                @if (assessment.FailoverDetail is { } detail)
+                {
+                    <p class="serving__detail">@detail</p>
+                }
+                @if (assessment.FrontDoorText is { } frontDoor)
+                {
+                    <p class="serving__frontdoor">
+                        @if (disagrees)
+                        {
+                            <StateIcon State="HealthState.Unhealthy" />
+                        }
+                        <span>@frontDoor</span>
+                    </p>
+                }
+            </div>
+            @if (hasVersionLine)
+            {
+                <VersionLine Assessment="versions" DeployableName="@Deployable.Info.Name" EnvironmentName="@Environment.Name"
+                             ProjectUrl="Deployable.Info.ProjectUrl" HistoryUrl="history" LogsUrl="logs"
+                             PinFile="@Deployable.Info.PinFile" HistoryIsOwn="Deployable.Info.PinHistoryUrl is not null" />
+            }
+        </div>
+    </header>
+
+    @if (!Deployable.Targets.Any())
+    {
+        @* Front Door is named only where the topology has one somewhere: a system without it has nodes only. *@
+        <p class="empty">@(Monitor.Topology.HasFrontDoor
+            ? "This deployable has neither a Front Door endpoint nor a node in the topology."
+            : "This deployable has no node in the topology.")</p>
+    }
+    else
+    {
+        <div class="tiles">
+            @{
+                var index = 0;
+            }
+            @foreach (var target in Deployable.Targets)
+            {
+                var id = $"{IdPrefix}-tile-{index++}";
+                <TargetTile @key="target" Target="target" HeadingId="@id" Zone="Zone" IsExpected="ReferenceEquals(target, expected)" Deployable="Deployable" />
+            }
+        </div>
+    }
+
+    <DeployableFacts Monitor="Monitor" Environment="Environment" Deployable="Deployable" IdPrefix="@IdPrefix" Zone="Zone" Now="Now" />
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public DeployableStatus Deployable { get; set; } = default!;
+
+    /// <summary>The environment of the deployable: it holds the versions pinned in Git.</summary>
+    [Parameter, EditorRequired]
+    public EnvironmentStatus Environment { get; set; } = default!;
+
+    /// <summary>The page's monitor: it holds the delivery facts of the system.</summary>
+    [Parameter, EditorRequired]
+    public DashboardMonitor Monitor { get; set; } = default!;
+
+    /// <summary>The moment of this rendering: "2 h ago" is counted from it.</summary>
+    [Parameter, EditorRequired]
+    public DateTimeOffset Now { get; set; }
+
+    /// <summary>Prefix of the element ids of this section, unique on the page.</summary>
+    [Parameter, EditorRequired]
+    public string IdPrefix { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+}

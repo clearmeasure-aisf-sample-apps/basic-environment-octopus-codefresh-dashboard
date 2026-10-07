@@ -1,0 +1,40 @@
+@* A state of the cluster view: the page's badge (StateBadge) with the view's own word. The shape says the state as
+   well as the colour: check, warning triangle, cross, dots, and a bar for the neutral states (stopped, finished, not
+   known). *@
+<span class="state state--@Css @(Quiet ? "state--quiet" : null)">
+    @if (State == ClusterState.Neutral)
+    {
+        <svg class="state-icon state-icon--neutral" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+            <circle class="state-icon__ring" cx="8" cy="8" r="6.75" />
+            <path class="state-icon__mark" d="M5 8h6" />
+        </svg>
+    }
+    else
+    {
+        <StateIcon State="Icon" />
+    }
+    <span class="state__label">@Label</span>
+</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public ClusterState State { get; set; }
+
+    /// <summary>The state's word: "Healthy", "Stopped", "CrashLoopBackOff".</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = default!;
+
+    /// <summary>In a table's row: the icon and the word without the pill.</summary>
+    [Parameter]
+    public bool Quiet { get; set; }
+
+    private HealthState Icon => State switch
+    {
+        ClusterState.Healthy => HealthState.Healthy,
+        ClusterState.Warning or ClusterState.Unhealthy => HealthState.Unhealthy,
+        ClusterState.Unreachable => HealthState.Unreachable,
+        _ => HealthState.Pending,
+    };
+
+    private string Css => State.ToString().ToLowerInvariant();
+}

@@ -1,0 +1,76 @@
+@* What the colours and lines of the runtime diagram mean. Every state also has its word in the diagram: the badge of a
+   node, the mark of a region. The swatches use the same classes as the diagram (css/app.css, "Runtime view"). *@
+<div class="runtime-legend" aria-label="Legend of the runtime diagram" role="group">
+    <ul>
+        @foreach (var (state, text) in Nodes)
+        {
+            <li>
+                <svg class="runtime-legend__swatch" viewBox="0 0 30 18" width="30" height="18" aria-hidden="true" focusable="false">
+                    <g class="rt-node" data-rt-state="@state"><rect class="rt-box" x="2" y="2" width="26" height="14" /></g>
+                </svg>
+                <span>@text</span>
+            </li>
+        }
+    </ul>
+    <ul>
+        @foreach (var (state, text) in Regions)
+        {
+            <li>
+                <svg class="runtime-legend__swatch" viewBox="0 0 30 18" width="30" height="18" aria-hidden="true" focusable="false">
+                    <g class="rt-region" data-rt-state="@state"><rect class="rt-frame" x="1.5" y="1.5" width="27" height="15" /></g>
+                </svg>
+                <span>@text</span>
+            </li>
+        }
+    </ul>
+    <ul>
+        @foreach (var (state, text) in Edges)
+        {
+            <li>
+                <svg class="runtime-legend__swatch" viewBox="0 0 30 18" width="30" height="18" aria-hidden="true" focusable="false">
+                    <g class="rt-edge" data-rt-state="@state"><path class="rt-edge-line" d="M2 9H28" /></g>
+                </svg>
+                <span>@text</span>
+            </li>
+        }
+        <li>
+            <svg class="runtime-legend__swatch" viewBox="0 0 30 18" width="30" height="18" aria-hidden="true" focusable="false">
+                <g class="rt-number rt-number--counted"><rect class="rt-number__hook" x="1.5" y="2.5" width="27" height="13" rx="3" /></g>
+            </svg>
+            <span>calls/min: the last minute, counted by the web apps themselves</span>
+        </li>
+        <li>
+            <svg class="runtime-legend__swatch" viewBox="0 0 30 18" width="30" height="18" aria-hidden="true" focusable="false">
+                <g class="rt-number"><rect class="rt-number__hook" x="1.5" y="2.5" width="27" height="13" rx="3" /></g>
+            </svg>
+            <span>– calls/min: no web app reports this number</span>
+        </li>
+    </ul>
+</div>
+
+@code {
+    private static readonly (string State, string Text)[] Nodes =
+    [
+        ("healthy", "Healthy: HTTP 200 (the database: a health check through it passes)"),
+        ("unhealthy", "Unhealthy: answers, not HTTP 200"),
+        ("unreachable", "Unreachable: no answer"),
+        ("checking", "Checking"),
+        ("neutral", "Not probed from the browser"),
+    ];
+
+    private static readonly (string State, string Text)[] Regions =
+    [
+        // "Frame", not "region": what the frame holds is a region on App Service and a namespace in a cluster, and the
+        // diagram names it in the frame's own title.
+        ("serving", "Frame of a region or namespace that serves traffic"),
+        ("standby", "On standby: healthy, no traffic"),
+        ("down", "Not serving: its web app is not healthy"),
+    ];
+
+    private static readonly (string State, string Text)[] Edges =
+    [
+        ("active", "Carries the traffic"),
+        ("idle", "Idle: no traffic expected"),
+        ("down", "Down: its target is not healthy"),
+    ];
+}

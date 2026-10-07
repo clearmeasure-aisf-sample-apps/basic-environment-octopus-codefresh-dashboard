@@ -1,0 +1,37 @@
+@* The deliveries of an environment that belong to no deployable the page checks: the system project itself (the
+   infrastructure and the pipeline) and the deployables the topology leaves out, such as the dashboard. Nothing
+   without the delivery facts. *@
+@{
+    var others = Monitor.Delivery?.Others(Environment.Name, Environment.Deployables.Select(deployable => deployable.Info.Name)) ?? [];
+}
+@if (others.Count > 0)
+{
+    <div class="facts-row" role="group" aria-label="@($"Other releases in {Environment.Name}")">
+        @{
+            var index = 0;
+        }
+        @foreach (var entry in others)
+        {
+            <DeliveryCard @key="entry.Name" Entry="entry" Environment="@Environment.Name" First="@Monitor.FirstEnvironment"
+                          Context="@DeliveryText.Context(entry.Name, Environment.Name)" IdPrefix="@($"{IdPrefix}-other-{index++}")"
+                          Zone="Zone" Now="Now" Changed="Monitor.Delivery?.Generated" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public DashboardMonitor Monitor { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public EnvironmentStatus Environment { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public string IdPrefix { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public DateTimeOffset Now { get; set; }
+}

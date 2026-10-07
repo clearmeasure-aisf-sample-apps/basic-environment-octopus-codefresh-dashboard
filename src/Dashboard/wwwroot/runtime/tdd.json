@@ -1,0 +1,98 @@
+{
+  "environment": "tdd",
+  "svg": "tdd.svg",
+  "nodes": [
+    {
+      "alias": "browser",
+      "qualifiedName": "browser",
+      "kind": "person",
+      "name": "Browser"
+    },
+    {
+      "alias": "fd_ui",
+      "qualifiedName": "sub.rg_edge.afd.fd_ui",
+      "kind": "frontdoor",
+      "deployable": "ui",
+      "name": "cmdemo2-tdd-ui",
+      "url": "https://cmdemo2-tdd-abc123.z01.azurefd.net"
+    },
+    {
+      "alias": "app_ui_primary",
+      "qualifiedName": "sub.rg_tier.region_primary.plan_primary.app_ui_primary",
+      "kind": "webapp",
+      "deployable": "ui",
+      "name": "app-cmdemo2-tdd-ui",
+      "role": "primary",
+      "region": "westus3",
+      "regionAlias": "region_primary",
+      "url": "https://app-cmdemo2-tdd-ui.azurewebsites.net"
+    },
+    {
+      "alias": "sqldb",
+      "qualifiedName": "sub.rg_tier.region_data.sqldb",
+      "kind": "sql",
+      "name": "sqldb-cmdemo2-tdd",
+      "region": "centralus",
+      "regionAlias": "region_data",
+      "url": null
+    },
+    {
+      "alias": "swa_dashboard",
+      "qualifiedName": "sub.rg_tier.region_data.swa_dashboard",
+      "kind": "staticsite",
+      "deployable": "dashboard",
+      "name": "swa-cmdemo2-tdd-dashboard",
+      "region": "centralus",
+      "regionAlias": "region_data",
+      "url": "http://localhost:5210"
+    }
+  ],
+  "regions": [
+    {
+      "alias": "region_primary",
+      "qualifiedName": "sub.rg_tier.region_primary",
+      "name": "westus3",
+      "roles": [
+        "primary"
+      ]
+    },
+    {
+      "alias": "region_data",
+      "qualifiedName": "sub.rg_tier.region_data",
+      "name": "centralus",
+      "roles": [
+        "data",
+        "static"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "browser-to-fd_ui",
+      "from": "browser",
+      "to": "fd_ui",
+      "kind": "public"
+    },
+    {
+      "id": "fd_ui-to-app_ui_primary",
+      "from": "fd_ui",
+      "to": "app_ui_primary",
+      "kind": "origin",
+      "priority": 1
+    },
+    {
+      "id": "app_ui_primary-to-sqldb",
+      "from": "app_ui_primary",
+      "to": "sqldb",
+      "kind": "sql"
+    },
+    {
+      "id": "browser-to-swa_dashboard",
+      "from": "browser",
+      "to": "swa_dashboard",
+      "kind": "dashboard"
+    }
+  ],
+  "generated": "2026-10-04T22:00:00Z",
+  "plantuml": "1.2026.8"
+}

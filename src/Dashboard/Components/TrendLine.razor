@@ -1,0 +1,20 @@
+@* A sparkline next to a number: the last readings, oldest on the left, on a scale that starts at zero; the dot is the
+   last reading. Its title says the same in words. Nothing is drawn with fewer than two readings. *@
+@if (Trend is { } trend)
+{
+    var (x, y) = trend.Last(Width, Height, Inset);
+    <svg class="trend" viewBox="0 0 @Width @Height" width="@Width" height="@Height" role="img" aria-label="@trend.Title" focusable="false">
+        <title>@trend.Title</title>
+        <polyline class="trend__line" points="@trend.Polyline(Width, Height, Inset)" />
+        <circle class="trend__now" cx="@x.ToString(CultureInfo.InvariantCulture)" cy="@y.ToString(CultureInfo.InvariantCulture)" r="2" />
+    </svg>
+}
+
+@code {
+    private const int Width = 52;
+    private const int Height = 16;
+    private const double Inset = 2.5;
+
+    [Parameter]
+    public Trend? Trend { get; set; }
+}

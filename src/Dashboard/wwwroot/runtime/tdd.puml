@@ -1,0 +1,41 @@
+@startuml
+!pragma layout smetana
+!include <C4/C4_Deployment>
+LAYOUT_LEFT_RIGHT()
+HIDE_STEREOTYPE()
+SHOW_PERSON_OUTLINE()
+skinparam wrapWidth 300
+skinparam maxMessageSize 220
+skinparam nodesep 30
+skinparam ranksep 40
+UpdateElementStyle("container", $bgColor="#607d8b", $fontColor="#ffffff", $borderColor="#455a64")
+UpdateElementStyle("person", $bgColor="#37474f", $fontColor="#ffffff", $borderColor="#263238")
+AddBoundaryTag("scope", $bgColor="#ffffff", $fontColor="#263238", $borderColor="#78909c", $borderStyle=DottedLine())
+AddNodeTag("region", $bgColor="#fafafa", $fontColor="#37474f", $borderColor="#90a4ae", $borderStyle=DashedLine())
+AddNodeTag("plan", $bgColor="#ffffff", $fontColor="#37474f", $borderColor="#b0bec5")
+UpdateRelStyle($textColor="#455a64", $lineColor="#78909c")
+
+Person(browser, "Browser", "a user, or this dashboard")
+Boundary(sub, "Azure subscription", $type="subscription", $tags="scope") {
+  Boundary(rg_edge, "rg-cmdemo2-edge", $type="resource group", $tags="scope") {
+    Deployment_Node(afd, "afd-cmdemo2", "Front Door profile, Standard: global", $tags="plan") {
+      Container(fd_ui, "cmdemo2-tdd-ui", "Front Door endpoint", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPoAAABiCAYAAAB52c4TAAAAdklEQVR42u3BMQEAAADCoPVPbQdvoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXgN/QQABuAm3gQAAAABJRU5ErkJggg==>")
+    }
+  }
+  Boundary(rg_tier, "rg-cmdemo2-nonprod", $type="resource group", $tags="scope") {
+    Deployment_Node(region_primary, "westus3", "Azure region: primary", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAL4AAAAWCAYAAAB+OyYeAAAAJklEQVR42u3BAQEAAACCIP+vbkhAAQAAAAAAAAAAAAAAAAAAADwYQWYAAUAsKwYAAAAASUVORK5CYII=>", $tags="region") {
+      Deployment_Node(plan_primary, "asp-cmdemo2-tdd", "App Service plan, B1", "shared by tdd, uat", $tags="plan") {
+        Container(app_ui_primary, "app-cmdemo2-tdd-ui", "web app: ui", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPoAAACSCAYAAABsS9cKAAAApElEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOBhOwAAARPT3VIAAAAASUVORK5CYII=>")
+      }
+    }
+    Deployment_Node(region_data, "centralus", "Azure region: data, static sites", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAL4AAAAWCAYAAAB+OyYeAAAAJklEQVR42u3BAQEAAACCIP+vbkhAAQAAAAAAAAAAAAAAAAAAADwYQWYAAUAsKwYAAAAASUVORK5CYII=>", $tags="region") {
+      ContainerDb(sqldb, "sqldb-cmdemo2-tdd", "Azure SQL database", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPoAAAAuCAYAAAABQwQEAAAAQ0lEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4GWz3gABsYbbhAAAAABJRU5ErkJggg==>")
+      Container(swa_dashboard, "swa-cmdemo2-tdd-dashboard", "Static Web App: dashboard", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPoAAAAuCAYAAAABQwQEAAAAQ0lEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4GWz3gABsYbbhAAAAABJRU5ErkJggg==>")
+    }
+  }
+}
+Rel(browser, fd_ui, "HTTPS", "public address of ui", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAAAiCAYAAADYt9L+AAAALElEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAF4GVSIAAXQNQtEAAAAASUVORK5CYII=>\n<U+00A0>")
+Rel(fd_ui, app_ui_primary, "origin, priority 1", "HTTPS", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAAAiCAYAAADYt9L+AAAALElEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAF4GVSIAAXQNQtEAAAAASUVORK5CYII=>\n<U+00A0>")
+Rel(app_ui_primary, sqldb, "reads and writes", "TCP 1433", "<img:data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAAAiCAYAAADYt9L+AAAALElEQVR42u3BMQEAAADCoPVPbQwfoAAAAAAAAAAAAAAAAAAAAAAAAAAAAF4GVSIAAXQNQtEAAAAASUVORK5CYII=>\n<U+00A0>")
+Rel(browser, swa_dashboard, "loads the dashboard", "HTTPS", "")
+@enduml

@@ -1,0 +1,33 @@
+@* A table's cell for one resource of a node or a pod: the number in words, and its share of the limit (a node: of
+   what it offers) as a bar when there is one. A dash while the cluster has no measurement. *@
+@if (Value is { } value)
+{
+    <span class="use-cell @(ClusterText.IsHigh(Percent) ? "use-cell--high" : null)">
+        <span class="use-cell__value">
+            @if (ClusterText.IsHigh(Percent))
+            {
+                <StateIcon State="HealthState.Unhealthy" />
+            }
+            @value
+        </span>
+        <Meter Label="@Label" Percent="Percent" ValueText="@(Percent is { } share ? $"{value}, {ClusterText.Percent(share)}" : value)" />
+    </span>
+}
+else
+{
+    <span class="use-cell__none" title="No measurement">—</span>
+}
+
+@code {
+    /// <summary>The number in words; null shows a dash.</summary>
+    [Parameter]
+    public string? Value { get; set; }
+
+    /// <summary>The share of the limit; null draws no bar.</summary>
+    [Parameter]
+    public double? Percent { get; set; }
+
+    /// <summary>The bar's accessible name: "CPU of ui-6d5f7c9b8-x2k4q against its limit".</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = default!;
+}

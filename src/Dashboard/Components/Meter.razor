@@ -1,0 +1,36 @@
+@* A share of a whole as a bar: what is used of a limit, of what a node offers, or a percentage Azure reports. The
+   number it shows always stands next to it in words; the bar's own name and value text say the same to a reader who
+   does not see it. A share from ClusterText.HighPercent on is marked, by its colour and by the weight of the words
+   next to it. Nothing is drawn without a share. *@
+@if (Percent is { } percent)
+{
+    <span class="meter @(Thin ? "meter--thin" : null) @(MarkHigh && ClusterText.IsHigh(percent) ? "meter--high" : null)" role="meter"
+          aria-label="@Label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Whole(percent)" aria-valuetext="@ValueText"
+          title="@($"{Label}: {ValueText}")">
+        <span class="meter__fill" style="width: @Whole(percent)%"></span>
+    </span>
+}
+
+@code {
+    /// <summary>What the bar measures: its accessible name.</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = default!;
+
+    /// <summary>The share in percent; null draws nothing. A share above the whole fills the bar.</summary>
+    [Parameter]
+    public double? Percent { get; set; }
+
+    /// <summary>The value in words: <c>0.81 of 3.86 cores, 21 %</c>.</summary>
+    [Parameter, EditorRequired]
+    public string ValueText { get; set; } = default!;
+
+    /// <summary>A second, thinner bar under the first: what is requested, under what is used.</summary>
+    [Parameter]
+    public bool Thin { get; set; }
+
+    /// <summary>False for a share where a high value is nothing to look at.</summary>
+    [Parameter]
+    public bool MarkHigh { get; set; } = true;
+
+    private static string Whole(double percent) => Math.Round(Math.Clamp(percent, 0, 100)).ToString(CultureInfo.InvariantCulture);
+}

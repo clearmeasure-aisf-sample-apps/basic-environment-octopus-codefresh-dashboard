@@ -1,0 +1,103 @@
+{
+  "system": {
+    "slug": "platform",
+    "name": "Work orders on the AKS platform",
+    "repository": "https://github.com/clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh",
+    "deliveryUrl": null
+  },
+  "environments": [
+    {
+      "name": "tdd",
+      "tier": "nonprod",
+      "versionsUrl": null,
+      "versionsHistoryUrl": null,
+      "deployables": [
+        {
+          "name": "workorders",
+          "projectUrl": "https://clearmeasure.octopus.app/app#/Spaces-335/projects/workorders",
+          "pinUrl": "https://raw.githubusercontent.com/clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh/main/gitops/apps/workorders/envs/tdd/app/kustomization.yaml",
+          "pinHistoryUrl": "https://github.com/clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh/commits/main/gitops/apps/workorders/envs/tdd/app/kustomization.yaml",
+          "frontDoor": null,
+          "healthPath": "/_healthcheck",
+          "alivePath": "/_healthcheck",
+          "versionPath": "/api/v1.0/version",
+          "telemetryPath": null,
+          "trafficPaths": [
+            "/"
+          ],
+          "buildPath": null,
+          "nodes": [
+            {
+              "name": "workorders-tdd",
+              "region": "southcentralus",
+              "role": "primary",
+              "url": "https://workorders-tdd.20-114-71-237.sslip.io"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "uat",
+      "tier": "nonprod",
+      "versionsUrl": null,
+      "versionsHistoryUrl": null,
+      "deployables": [
+        {
+          "name": "workorders",
+          "projectUrl": "https://clearmeasure.octopus.app/app#/Spaces-335/projects/workorders",
+          "pinUrl": "https://raw.githubusercontent.com/clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh/main/gitops/apps/workorders/envs/uat/app/kustomization.yaml",
+          "pinHistoryUrl": "https://github.com/clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh/commits/main/gitops/apps/workorders/envs/uat/app/kustomization.yaml",
+          "frontDoor": null,
+          "healthPath": "/_healthcheck",
+          "alivePath": "/_healthcheck",
+          "versionPath": "/api/v1.0/version",
+          "telemetryPath": null,
+          "trafficPaths": [
+            "/"
+          ],
+          "buildPath": null,
+          "nodes": [
+            {
+              "name": "workorders-uat",
+              "region": "southcentralus",
+              "role": "primary",
+              "url": "https://workorders-uat.20-114-71-237.sslip.io"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "prod",
+      "tier": "prod",
+      "versionsUrl": null,
+      "versionsHistoryUrl": null,
+      "deployables": [
+        {
+          "name": "workorders",
+          "projectUrl": "https://clearmeasure.octopus.app/app#/Spaces-335/projects/workorders",
+          "pinUrl": "https://raw.githubusercontent.com/clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh/main/gitops/apps/workorders/envs/prod/app/kustomization.yaml",
+          "pinHistoryUrl": "https://github.com/clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh/commits/main/gitops/apps/workorders/envs/prod/app/kustomization.yaml",
+          "frontDoor": null,
+          "healthPath": "/_healthcheck",
+          "alivePath": "/_healthcheck",
+          "versionPath": "/api/v1.0/version",
+          "telemetryPath": null,
+          "trafficPaths": [
+            "/"
+          ],
+          "buildPath": null,
+          "nodes": [
+            {
+              "name": "workorders-prod",
+              "region": "southcentralus",
+              "role": "primary",
+              "url": "https://workorders-prod.20-225-152-33.sslip.io"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

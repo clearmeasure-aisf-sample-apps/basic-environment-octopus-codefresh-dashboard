@@ -1,0 +1,118 @@
+@* The pods of one namespace: a summary line, one row per pod (those that are not ready and not finished first), and
+   the namespace's volume claims in one line. A finished job is muted: it is no problem. CPU and memory are measured
+   against the pod's limit where it has one. *@
+@if (!Group.Found)
+{
+    <p class="empty">The status file lists no namespace <code>@Group.Name</code>.</p>
+}
+else
+{
+    <p class="namespace__summary">@ClusterText.Summary(Group)</p>
+    @if (Group.Pods.Count == 0)
+    {
+        <p class="empty">No pods.</p>
+    }
+    else
+    {
+        <div class="table-scroll" role="region" aria-labelledby="@LabelledBy" tabindex="0">
+            <table class="grid grid--pods" aria-labelledby="@LabelledBy">
+                <thead>
+                    <tr>
+                        <th scope="col">Pod</th>
+                        <th scope="col" title="The kind of the workload that owns the pod">Kind</th>
+                        <th scope="col">State</th>
+                        <th scope="col" class="grid__number" title="How often its containers were started again">Restarts</th>
+                        <th scope="col" title="@CpuHelp">CPU</th>
+                        <th scope="col" title="Used now, of the pod's limit where it has one">Memory</th>
+                        <th scope="col">Age</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Group.Pods)
+                    {
+                        var pod = row.Pod;
+                        <tr class="@(row.State == PodState.Finished ? "grid__row--muted" : null)">
+                            <th scope="row">
+                                <span class="pod">
+                                    <span class="pod__workload">@pod.Label</span>
+                                    @if (pod.Workload is not null)
+                                    {
+                                        <span class="pod__name">@pod.Name</span>
+                                    }
+                                    @* Shown on a narrow screen only, where the Kind column is not. *@
+                                    @if (pod.Kind is { } kind)
+                                    {
+                                        <span class="pod__kind">@kind</span>
+                                    }
+                                </span>
+                            </th>
+                            <td>@(pod.Kind ?? None)</td>
+                            <td>
+                                <span title="@Containers(pod)">
+                                    <ClusterBadge State="StateOf(row.State)" Label="@ClusterText.PodWords(pod, row.State, AsOf)" Quiet="true" />
+                                </span>
+                            </td>
+                            <td class="grid__number @(pod.Restarts > 0 && row.State == PodState.Unhealthy ? "grid__warn" : null)">@BuildText.Count(pod.Restarts)</td>
+                            <td>
+                                <UseCell Value="@ClusterText.CpuUse(pod.Cpu)" Percent="ClusterText.Share(pod.Cpu.Usage, pod.Cpu.Limits)"
+                                         Label="@($"CPU of {pod.Name} against its limit")" />
+                            </td>
+                            <td>
+                                <UseCell Value="@ClusterText.MemoryUse(pod.Memory)" Percent="ClusterText.Share(pod.Memory.Usage, pod.Memory.Limits)"
+                                         Label="@($"Memory of {pod.Name} against its limit")" />
+                            </td>
+                            <td>
+                                @if (pod.StartedAt is { } started)
+                                {
+                                    <time datetime="@TimeText.Iso(started)" title="@($"Started {TimeText.DateAndTime(started, Zone)}")">@ClusterText.Age(started, AsOf)</time>
+                                }
+                                else
+                                {
+                                    @None
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    @if (Group.Volumes.Count > 0)
+    {
+        <p class="namespace__volumes"><span class="namespace__label">Volumes</span> @string.Join(" · ", Group.Volumes.Select(ClusterText.Volume))</p>
+    }
+}
+
+@code {
+    private const string None = "—";
+
+    private const string CpuHelp = "Used now, of the pod's limit where it has one. m is millicores: a thousandth of a core.";
+
+    [Parameter, EditorRequired]
+    public NamespaceGroup Group { get; set; } = default!;
+
+    /// <summary>The id of the heading that names the namespace: the table's name.</summary>
+    [Parameter, EditorRequired]
+    public string LabelledBy { get; set; } = default!;
+
+    /// <summary>The moment the facts are of: ages are counted to it.</summary>
+    [Parameter, EditorRequired]
+    public DateTimeOffset AsOf { get; set; }
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    private static ClusterState StateOf(PodState state) => state switch
+    {
+        PodState.Ready => ClusterState.Healthy,
+        PodState.Starting => ClusterState.Checking,
+        PodState.Unhealthy => ClusterState.Unhealthy,
+        _ => ClusterState.Neutral,
+    };
+
+    private static string? Containers(ClusterPod pod) => (pod.ContainersReady, pod.Containers) switch
+    {
+        ({ } ready, { } all) => $"Phase {pod.Phase}; {ClusterText.Of(ready, all)} containers ready",
+        _ => $"Phase {pod.Phase}",
+    };
+}

@@ -1,0 +1,40 @@
+{
+  "generated": "2026-10-06T20:15:30Z",
+  "intervalSeconds": 15,
+  "kubernetesVersion": "v1.33.3",
+  "nodes": [
+    {
+      "name": "aks-system-12148983-vmss000000", "ready": true, "pressures": [], "unschedulable": false,
+      "pool": "system", "size": "Standard_D4as_v6", "zone": null, "kubeletVersion": "v1.33.3", "createdAt": "2026-10-03T14:02:11Z",
+      "cpu": { "usage": 812, "allocatable": 3860, "requests": 2450, "limits": 9100 },
+      "memory": { "usage": 9876543210, "allocatable": 13400000000, "requests": 6200000000, "limits": 11800000000 },
+      "pods": { "count": 63, "capacity": 110 }
+    }
+  ],
+  "namespaces": [
+    {
+      "name": "argocd",
+      "pods": [
+        { "name": "argocd-application-controller-0", "workload": "argocd-application-controller", "kind": "StatefulSet", "node": "aks-system-12148983-vmss000000", "phase": "Running", "ready": true, "containers": 1, "containersReady": 1, "restarts": 0, "reason": null, "startedAt": "2026-10-03T14:20:05Z", "cpu": { "usage": 61, "requests": 250, "limits": null }, "memory": { "usage": 412000000, "requests": 268435456, "limits": null } }
+      ],
+      "volumes": []
+    },
+    {
+      "name": "cmdemo3-prod",
+      "pods": [
+        { "name": "ui-6d5f7c9b8-x2k4q", "workload": "ui", "kind": "Deployment", "node": "aks-system-12148983-vmss000000", "phase": "Running", "ready": true, "containers": 1, "containersReady": 1, "restarts": 0, "reason": null, "startedAt": "2026-10-06T19:28:40Z", "cpu": { "usage": 14, "requests": 100, "limits": 500 }, "memory": { "usage": 271000000, "requests": 268435456, "limits": 536870912 } },
+        { "name": "db-0", "workload": "db", "kind": "StatefulSet", "node": "aks-system-12148983-vmss000000", "phase": "Running", "ready": true, "containers": 1, "containersReady": 1, "restarts": 1, "reason": null, "startedAt": "2026-10-04T02:11:09Z", "cpu": { "usage": 38, "requests": 250, "limits": 1000 }, "memory": { "usage": 1310000000, "requests": 1073741824, "limits": 2147483648 } },
+        { "name": "dashboard-5b8c7d6f4-9zq7t", "workload": "dashboard", "kind": "Deployment", "node": "aks-system-12148983-vmss000000", "phase": "Running", "ready": true, "containers": 1, "containersReady": 1, "restarts": 0, "reason": null, "startedAt": "2026-10-06T19:10:02Z", "cpu": { "usage": 1, "requests": 10, "limits": 200 }, "memory": { "usage": 9000000, "requests": 33554432, "limits": 134217728 } },
+        { "name": "db-backup-29330400-7kx2p", "workload": "db-backup", "kind": "Job", "node": "aks-system-12148983-vmss000000", "phase": "Succeeded", "ready": false, "containers": 1, "containersReady": 0, "restarts": 0, "reason": "Completed", "startedAt": "2026-10-06T08:00:03Z", "cpu": { "usage": null, "requests": 50, "limits": 500 }, "memory": { "usage": null, "requests": 67108864, "limits": 268435456 } }
+      ],
+      "volumes": [ { "name": "data-db-0", "capacity": 8589934592, "phase": "Bound" } ]
+    },
+    {
+      "name": "cmdemo3-tdd",
+      "pods": [
+        { "name": "ui-7f6b5c4d3-m8n2p", "workload": "ui", "kind": "Deployment", "node": "aks-system-12148983-vmss000000", "phase": "Running", "ready": false, "containers": 1, "containersReady": 0, "restarts": 7, "reason": "CrashLoopBackOff", "startedAt": "2026-10-06T20:01:12Z", "cpu": { "usage": 0, "requests": 100, "limits": 500 }, "memory": { "usage": 21000000, "requests": 268435456, "limits": 536870912 } }
+      ],
+      "volumes": [ { "name": "data-db-0", "capacity": 8589934592, "phase": "Bound" } ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "generated": "2026-10-04T22:00:00Z",
+  "plantuml": "1.2026.8",
+  "environments": [
+    {
+      "name": "tdd",
+      "manifest": "tdd.json",
+      "svg": "tdd.svg"
+    },
+    {
+      "name": "uat",
+      "manifest": "uat.json",
+      "svg": "uat.svg"
+    }
+  ]
+}

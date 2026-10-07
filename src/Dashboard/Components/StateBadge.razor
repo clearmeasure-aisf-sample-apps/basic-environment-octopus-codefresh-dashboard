@@ -1,0 +1,9 @@
+<span class="state state--@State.ToString().ToLowerInvariant()">
+    <StateIcon State="State" />
+    <span class="state__label">@HealthClassifier.Label(State)</span>
+</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public HealthState State { get; set; }
+}

@@ -1,0 +1,118 @@
+{
+  "system": {
+    "slug": "cmdemo2",
+    "name": "CM demo 2 multi-region",
+    "repository": "https://github.com/example-org/cmdemo2-system",
+    "deliveryUrl": "https://raw.githubusercontent.com/example-org/cmdemo2-system/status/delivery.json"
+  },
+  "generated": "2026-10-04T22:00:00Z",
+  "environments": [
+    {
+      "name": "tdd",
+      "tier": "nonprod",
+      "versionsUrl": "https://raw.githubusercontent.com/example-org/cmdemo2-system/main/environments/tdd/versions.json",
+      "versionsHistoryUrl": "https://github.com/example-org/cmdemo2-system/commits/main/environments/tdd/versions.json",
+      "links": {
+        "applicationInsights": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-tdd/overview",
+        "applicationMap": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-tdd/applicationMap",
+        "database": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/Microsoft.Sql/servers/sql-cmdemo2-tdd-abc12/databases/sqldb-cmdemo2-tdd/overview",
+        "resourceGroup": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/overview"
+      },
+      "deployables": [
+        {
+          "name": "ui",
+          "projectUrl": "https://example.octopus.app/app#/Spaces-1/projects/cmdemo2-ui",
+          "frontDoor": "https://cmdemo2-tdd-abc123.z01.azurefd.net",
+          "healthPath": "/_healthcheck",
+          "alivePath": "/alive",
+          "versionPath": "/_version",
+          "telemetryPath": "/_telemetry",
+          "trafficPaths": [
+            "/",
+            "/api/workorders/summary"
+          ],
+          "buildPath": "/_build",
+          "links": {
+            "frontDoor": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-edge/providers/Microsoft.Cdn/profiles/afd-cmdemo2/overview",
+            "logs": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/blade/Microsoft_Azure_Monitoring_Logs/LogsBlade/resourceId/%2Fsubscriptions%2F00000000-0000-0000-0000-000000000000%2FresourceGroups%2Frg-cmdemo2-nonprod%2Fproviders%2Fmicrosoft.insights%2Fcomponents%2Fappi-cmdemo2-tdd/source/LogsBlade.AnalyticsShareLinkToQuery/q/H4sIAAAAAAAAA03OPWrEMBQE4N6nGLaSQCl2wcUWPkCKpMgFglYaE4F%2BnPcklgQffjEkIe0w3zDCz0HtOu24f1CIkNuI728t89UXYllwCiWytMvTSKdph45SvKRvQn4sFoQ2ajfWYfUpM%2F4maTU6QqDqMbT6rLQO23V%2BOZC0UaPZKIG1p0wTh%2FieWnW4ztbhbHH7wi1V01Ohdl82h7lY9%2B%2Fkc9Xua%2BC0o0mkHOKvjUgNDxt%2FX%2FTiAAAA/timespan/PT1H"
+          },
+          "nodes": [
+            {
+              "name": "app-cmdemo2-tdd-ui",
+              "region": "westus3",
+              "role": "primary",
+              "url": "https://app-cmdemo2-tdd-ui.azurewebsites.net",
+              "links": {
+                "portal": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/Microsoft.Web/sites/app-cmdemo2-tdd-ui/appServices",
+                "liveMetrics": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-tdd/quickPulse",
+                "performance": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-tdd/performance",
+                "failures": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-tdd/failures",
+                "dependencies": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/blade/Microsoft_Azure_Monitoring_Logs/LogsBlade/resourceId/%2Fsubscriptions%2F00000000-0000-0000-0000-000000000000%2FresourceGroups%2Frg-cmdemo2-nonprod%2Fproviders%2Fmicrosoft.insights%2Fcomponents%2Fappi-cmdemo2-tdd/source/LogsBlade.AnalyticsShareLinkToQuery/q/H4sIAAAAAAAAA02OS0rEUBRE51lF0aMEngOFHvQgS9CBG2iu91big%2FcJ79PSksVLFMVp1TlFGTcmY1LPOuz4eGchNORu19cc%2BCKRmGecNBpjfnro%2FjTsqD1GKf6TUAmhYobmnto4OSziA%2B038ctYuyprPVYWCZWTg9zW50MquScb5baO1os0n9Pk8Dg5bJfzP2BjUabmA%2F84h8v5m8XbHe2%2B0aFJWdkckkQOO3IxlqP9eWis%2BgWscLpp7AAAAA%3D%3D/timespan/PT1H"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "uat",
+      "tier": "nonprod",
+      "versionsUrl": "https://raw.githubusercontent.com/example-org/cmdemo2-system/main/environments/uat/versions.json",
+      "versionsHistoryUrl": "https://github.com/example-org/cmdemo2-system/commits/main/environments/uat/versions.json",
+      "links": {
+        "applicationInsights": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-uat/overview",
+        "applicationMap": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-uat/applicationMap",
+        "database": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/Microsoft.Sql/servers/sql-cmdemo2-uat-def45/databases/sqldb-cmdemo2-uat/overview",
+        "resourceGroup": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/overview"
+      },
+      "deployables": [
+        {
+          "name": "ui",
+          "projectUrl": "https://example.octopus.app/app#/Spaces-1/projects/cmdemo2-ui",
+          "frontDoor": "https://cmdemo2-uat-def456.z01.azurefd.net",
+          "healthPath": "/_healthcheck",
+          "alivePath": "/alive",
+          "versionPath": "/_version",
+          "telemetryPath": "/_telemetry",
+          "trafficPaths": [
+            "/",
+            "/api/workorders/summary"
+          ],
+          "buildPath": "/_build",
+          "links": {
+            "frontDoor": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-edge/providers/Microsoft.Cdn/profiles/afd-cmdemo2/overview",
+            "logs": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/blade/Microsoft_Azure_Monitoring_Logs/LogsBlade/resourceId/%2Fsubscriptions%2F00000000-0000-0000-0000-000000000000%2FresourceGroups%2Frg-cmdemo2-nonprod%2Fproviders%2Fmicrosoft.insights%2Fcomponents%2Fappi-cmdemo2-uat/source/LogsBlade.AnalyticsShareLinkToQuery/q/H4sIAAAAAAAAA03OPWrEMBQE4N6nGLaSQCl2wcUWPkCKpMgFglYaE4F%2BnPcklgQffjEkIe0w3zDCz0HtOu24f1CIkNuI728t89UXYllwCiWytMvTSKdph45SvKRvQn4sFoQ2ajfWYfUpM%2F4maTU6QqDqMbT6rLQO23V%2BOZC0UaPZKIG1p0wTh%2FieWnW4ztbhbHH7wi1V01Ohdl82h7lY9%2B%2Fkc9Xua%2BC0o0mkHOKvjUgNDxt%2FX%2FTiAAAA/timespan/PT1H"
+          },
+          "nodes": [
+            {
+              "name": "app-cmdemo2-uat-ui",
+              "region": "westus3",
+              "role": "primary",
+              "url": "https://app-cmdemo2-uat-ui.azurewebsites.net",
+              "links": {
+                "portal": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/Microsoft.Web/sites/app-cmdemo2-uat-ui/appServices",
+                "liveMetrics": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-uat/quickPulse",
+                "performance": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-uat/performance",
+                "failures": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-uat/failures",
+                "dependencies": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/blade/Microsoft_Azure_Monitoring_Logs/LogsBlade/resourceId/%2Fsubscriptions%2F00000000-0000-0000-0000-000000000000%2FresourceGroups%2Frg-cmdemo2-nonprod%2Fproviders%2Fmicrosoft.insights%2Fcomponents%2Fappi-cmdemo2-uat/source/LogsBlade.AnalyticsShareLinkToQuery/q/H4sIAAAAAAAAA02OS0rEUBRE51lF0aMEngOFHvQgS9CBG2iu91big%2FcJ79PSksVLFMVp1TlFGTcmY1LPOuz4eGchNORu19cc%2BCKRmGecNBpjfnro%2FjTsqD1GKf6TUAmhYobmnto4OSziA%2B038ctYuyprPVYWCZWTg9zW50MquScb5baO1os0n9Pk8Dg5bJfzP2BjUabmA%2F84h8v5m8XbHe2%2B0aFJWdkckkQOO3IxlqP9eWis%2BgWscLpp7AAAAA%3D%3D/timespan/PT1H"
+              }
+            },
+            {
+              "name": "app-cmdemo2-uat-ui-eastus2",
+              "region": "eastus2",
+              "role": "standby",
+              "url": "https://app-cmdemo2-uat-ui-eastus2.azurewebsites.net",
+              "links": {
+                "portal": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/Microsoft.Web/sites/app-cmdemo2-uat-ui-eastus2/appServices",
+                "liveMetrics": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-uat/quickPulse",
+                "performance": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-uat/performance",
+                "failures": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-cmdemo2-nonprod/providers/microsoft.insights/components/appi-cmdemo2-uat/failures",
+                "dependencies": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/blade/Microsoft_Azure_Monitoring_Logs/LogsBlade/resourceId/%2Fsubscriptions%2F00000000-0000-0000-0000-000000000000%2FresourceGroups%2Frg-cmdemo2-nonprod%2Fproviders%2Fmicrosoft.insights%2Fcomponents%2Fappi-cmdemo2-uat/source/LogsBlade.AnalyticsShareLinkToQuery/q/H4sIAAAAAAAAA02OS0rEUBRE51lF0aMEngOFHvQgS9CBG2iu91big%2FcJ79PSksVLFMVp1TlFGTcmY1LPOuz4eGchNORu19cc%2BCKRmGecNBpjfnro%2FjTsqD1GKf6TUAmhYobmnto4OSziA%2B038ctYuyprPVYWCZWTg9zW50MquScb5baO1os0n9Pk8Dg5bJfzP2BjUabmA%2F84h8v5m8XbHe2%2B0aFJWdkckkQOO3IxlqP9eWis%2BgWscLpp7AAAAA%3D%3D/timespan/PT1H"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

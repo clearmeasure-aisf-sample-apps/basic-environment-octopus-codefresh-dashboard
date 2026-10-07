@@ -1,0 +1,110 @@
+@* The cluster as it reports itself (ClusterStatus, written by the collector inside it): the live state with what is
+   wrong, then the sums over its nodes and pods, with the trends of the CPU and the memory this page has seen. When
+   the file does not answer, the card says what Azure reports next to it: ClusterAssessment decides the state and its
+   words. *@
+@{
+    var assessment = ClusterAssessment.Live(Reading, Service, Now, Zone);
+    var status = Reading.Value;
+    var asOf = status?.AsOf(Now) ?? Now;
+}
+<section class="card cluster-card cluster-card--@assessment.State.ToString().ToLowerInvariant()" aria-labelledby="cluster-live-title">
+    <header class="cluster-card__header">
+        <h3 class="card__title" id="cluster-live-title">
+            Cluster
+            <span class="card__context">live, as the collector inside it reports</span>
+        </h3>
+        <ClusterBadge State="assessment.State" Label="@assessment.Label" />
+    </header>
+    @* Announced: the one line of the view that says whether something is wrong. *@
+    <p class="cluster-card__headline" role="status">@assessment.Headline</p>
+    @if (assessment.Detail is { } detail)
+    {
+        <p class="cluster-card__detail">@detail</p>
+    }
+
+    @if (status is not null)
+    {
+        var totals = ClusterTotals.Of(status, asOf);
+        <dl class="metrics cluster-card__totals">
+            <div>
+                <dt>Nodes ready</dt>
+                <dd>@ClusterText.Of(totals.NodesReady, totals.Nodes)</dd>
+            </div>
+            <div>
+                <dt title="Finished jobs are in neither number">Pods ready</dt>
+                <dd>
+                    <span>@ClusterText.Of(totals.PodsReady, totals.Pods)</span>
+                    @if (totals.PodsFinished > 0)
+                    {
+                        <span class="unit">@totals.PodsFinished finished</span>
+                    }
+                </dd>
+            </div>
+            @if (totals.PodsOnNodes is { } pods)
+            {
+                <div>
+                    <dt title="The pods the nodes run, of how many they can take">Pods on the nodes</dt>
+                    <dd>@(totals.PodCapacity is { } capacity ? ClusterText.Of(pods, capacity) : BuildText.Count(pods))</dd>
+                </div>
+            }
+            <div>
+                <dt title="How often containers were started again, over all pods">Restarts</dt>
+                <dd>@BuildText.Count(totals.Restarts)</dd>
+            </div>
+            @if (status.KubernetesVersion is { } version)
+            {
+                <div>
+                    <dt>Kubernetes</dt>
+                    <dd>@version</dd>
+                </div>
+            }
+        </dl>
+
+        <div class="uses">
+            <UseRow Name="CPU" Label="CPU used of what the nodes offer" Value="@ClusterText.NodeCpu(totals.Cpu)"
+                    Percent="ClusterText.Share(totals.Cpu.Usage, totals.Cpu.Allocatable)" Trend="CpuTrend"
+                    Requested="@ClusterText.Requested(totals.Cpu)" RequestedPercent="ClusterText.Share(totals.Cpu.Requests, totals.Cpu.Allocatable)"
+                    RequestedLabel="CPU the pods request of what the nodes offer" />
+            <UseRow Name="Memory" Label="Memory used of what the nodes offer" Value="@ClusterText.NodeMemory(totals.Memory)"
+                    Percent="ClusterText.Share(totals.Memory.Usage, totals.Memory.Allocatable)" Trend="MemoryTrend"
+                    Requested="@ClusterText.Requested(totals.Memory)" RequestedPercent="ClusterText.Share(totals.Memory.Requests, totals.Memory.Allocatable)"
+                    RequestedLabel="Memory the pods request of what the nodes offer" />
+        </div>
+    }
+
+    @if (status is { Generated: not null } or { IntervalSeconds: not null })
+    {
+        <p class="cluster-card__foot">
+            @if (status.Generated is { } generated)
+            {
+                <time datetime="@TimeText.Iso(generated)" title="@TimeText.DateAndTime(generated, Zone)">@ClusterText.AsOf(generated, Now, Zone)</time>
+            }
+            @if (status.IntervalSeconds is { } interval)
+            {
+                <span>the collector writes every @interval s</span>
+            }
+        </p>
+    }
+</section>
+
+@code {
+    /// <summary>The last reading of the cluster's own status.</summary>
+    [Parameter, EditorRequired]
+    public SourceReading<ClusterStatus> Reading { get; set; } = default!;
+
+    /// <summary>The last reading of Azure's facts; null when the topology names no address for them.</summary>
+    [Parameter]
+    public SourceReading<AksService>? Service { get; set; }
+
+    [Parameter]
+    public Trend? CpuTrend { get; set; }
+
+    [Parameter]
+    public Trend? MemoryTrend { get; set; }
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public DateTimeOffset Now { get; set; }
+}

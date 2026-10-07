@@ -1,0 +1,59 @@
+@* The cluster view: the Kubernetes cluster the system runs in, from two public files the page reads with every round
+   of its checks (ClusterMonitor). What Azure reports about the AKS service stands next to what the cluster reports
+   about itself, because the two can differ. Every state and every word is decided in plain C# (Dashboard.Cluster);
+   the components only place them. *@
+<section class="cluster" aria-labelledby="cluster-title">
+    <header class="cluster__header">
+        <h2 id="cluster-title">Cluster@(Cluster.Info.Name is { } name ? $": {name}" : string.Empty)</h2>
+    </header>
+    <p class="help">
+        Two sources, read with every check of this page. Live, from inside the cluster: a collector writes its nodes,
+        namespaces, pods and volumes to a public file every few seconds. Slow, from Azure: a scheduled workflow publishes
+        what Azure itself says about the AKS service about every ten minutes. Where the two differ, the difference is
+        worth a look: Azure can report a service available whose pods do not answer, and a stopped cluster reports
+        nothing at all. CPU is in cores, or in millicores (m, a thousandth of a core); memory in MiB and GiB. A link
+        opens the Azure portal in a new tab, which asks you to sign in.
+    </p>
+
+    @if (Cluster.Status is null && Cluster.Service is null)
+    {
+        <p class="empty">The topology names the cluster without an address to read: neither <code>statusUrl</code> nor <code>serviceUrl</code>.</p>
+    }
+    else
+    {
+        <div class="cluster__cards">
+            @if (Cluster.Service is { } service)
+            {
+                <AksServiceCard Reading="service" Name="@Cluster.Info.Name" Links="Cluster.Info.Links" Zone="Zone" Now="Now" />
+            }
+            @if (Cluster.Status is { } reading)
+            {
+                <ClusterCard Reading="reading" Service="Cluster.Service" CpuTrend="Cluster.CpuTrend" MemoryTrend="Cluster.MemoryTrend" Zone="Zone" Now="Now" />
+            }
+        </div>
+    }
+
+    @if (Cluster.Status?.Value is { } status)
+    {
+        var asOf = status.AsOf(Now);
+        <ClusterNodes Status="status" AsOf="asOf" Zone="Zone" />
+        <ClusterPods Groups="ClusterGroups.Of(status, Environments, asOf)" Name="@Cluster.Info.Name" Links="Cluster.Info.Links" AsOf="asOf" Zone="Zone" />
+    }
+</section>
+
+@code {
+    /// <summary>The cluster of the page's monitor: read by the same rounds as the health checks.</summary>
+    [Parameter, EditorRequired]
+    public ClusterMonitor Cluster { get; set; } = default!;
+
+    /// <summary>The environments of the topology: their namespaces come first, in this order.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<EnvironmentInfo> Environments { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    /// <summary>The moment of this rendering: "5 min ago" and the age of the files are counted from it.</summary>
+    [Parameter, EditorRequired]
+    public DateTimeOffset Now { get; set; }
+}

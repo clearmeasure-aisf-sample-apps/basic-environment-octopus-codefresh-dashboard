@@ -1,0 +1,167 @@
+@* The AKS service as Azure reports it (AksService): the verdict of Azure Resource Health as the state, then the
+   facts, the node pools and Azure Monitor's numbers (the nodes, and the API server of the control plane). Slow by design: a workflow publishes the file about every ten
+   minutes. ClusterAssessment decides the state and its words. *@
+@{
+    var assessment = ClusterAssessment.Service(Reading);
+    var service = Reading.Value;
+}
+<section class="card cluster-card cluster-card--@assessment.State.ToString().ToLowerInvariant()" aria-labelledby="cluster-service-title">
+    <header class="cluster-card__header">
+        <h3 class="card__title" id="cluster-service-title">
+            AKS service
+            <span class="card__context">what Azure reports, published about every ten minutes</span>
+        </h3>
+        <ClusterBadge State="assessment.State" Label="@assessment.Label" />
+    </header>
+    <p class="cluster-card__headline">@assessment.Headline</p>
+    @if (assessment.Detail is { } detail)
+    {
+        <p class="cluster-card__detail">@detail</p>
+    }
+
+    @if (service is not null)
+    {
+        <dl class="facts">
+            @if (service.PowerState is { } power)
+            {
+                <div>
+                    <dt>Power state</dt>
+                    <dd>@power</dd>
+                </div>
+            }
+            @if (service.ProvisioningState is { } provisioning)
+            {
+                <div>
+                    <dt>Provisioning</dt>
+                    <dd>@provisioning</dd>
+                </div>
+            }
+            @if (service.Availability is { } availability && (availability.Reason is not null || availability.OccurredAt is not null))
+            {
+                <div>
+                    <dt title="Azure Resource Health">Verdict</dt>
+                    <dd class="facts__parts">
+                        <span>@availability.State</span>
+                        @if (availability.OccurredAt is { } since)
+                        {
+                            <span>since <time datetime="@TimeText.Iso(since)" title="@TimeText.DateAndTime(since, Zone)">@TimeText.Ago(since, Now)</time></span>
+                        }
+                        @if (availability.Reason is { } reason)
+                        {
+                            <span>@reason</span>
+                        }
+                    </dd>
+                </div>
+            }
+            @if (service.KubernetesVersion is { } version)
+            {
+                <div>
+                    <dt>Kubernetes</dt>
+                    <dd>@version</dd>
+                </div>
+            }
+            @if (service.Tier is { } tier)
+            {
+                <div>
+                    <dt>Tier</dt>
+                    <dd>@tier</dd>
+                </div>
+            }
+            @if (service.Location is { } region)
+            {
+                <div>
+                    <dt>Region</dt>
+                    <dd>@region</dd>
+                </div>
+            }
+            @if (service.Pools.Count > 0)
+            {
+                <div>
+                    <dt>Node pools</dt>
+                    <dd>
+                        <ul class="pools">
+                            @foreach (var pool in service.Pools)
+                            {
+                                <li>
+                                    <strong>@pool.Name</strong>
+                                    @if (pool.Mode is { } mode)
+                                    {
+                                        <span class="chip">@mode</span>
+                                    }
+                                    @if (ClusterText.PoolSize(pool) is { } size)
+                                    {
+                                        <span>@size</span>
+                                    }
+                                    @if (pool.OsDiskGb is { } disk)
+                                    {
+                                        <span>@disk GB OS disk</span>
+                                    }
+                                    @if ((pool.PowerState ?? pool.ProvisioningState) is not null)
+                                    {
+                                        <span class="pools__state">@string.Join(", ", new[] { pool.PowerState, pool.ProvisioningState }.OfType<string>())</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </dd>
+                </div>
+            }
+        </dl>
+
+        @* A number Azure does not emit for this cluster is a dash: it is no problem. *@
+        @if (service.Metrics is { HasAny: true } metrics)
+        {
+            <div class="cluster-card__block" role="group" aria-labelledby="cluster-service-metrics">
+                <h4 class="tile__label" id="cluster-service-metrics" title="Azure Monitor's numbers for the nodes and for the API server of the control plane; a dash where Azure reports none">Azure Monitor, @ClusterText.MetricsWindow(metrics)</h4>
+                <div class="uses uses--small">
+                    <UseRow Name="Node CPU" Label="Node CPU, as Azure Monitor reports it" Value="@Percent(metrics.NodeCpuPercent)" Percent="metrics.NodeCpuPercent" ShowPercent="false" />
+                    <UseRow Name="Node memory" Label="Node memory, as Azure Monitor reports it" Value="@Percent(metrics.NodeMemoryPercent)" Percent="metrics.NodeMemoryPercent" ShowPercent="false" />
+                    <UseRow Name="Node disk" Label="Node disk, as Azure Monitor reports it" Value="@Percent(metrics.NodeDiskPercent)" Percent="metrics.NodeDiskPercent" ShowPercent="false" />
+                    <UseRow Name="API server CPU" Label="API server CPU, as Azure Monitor reports it" Value="@Percent(metrics.ApiServerCpuPercent)" Percent="metrics.ApiServerCpuPercent" ShowPercent="false" />
+                    <UseRow Name="API server memory" Label="API server memory, as Azure Monitor reports it" Value="@Percent(metrics.ApiServerMemoryPercent)" Percent="metrics.ApiServerMemoryPercent" ShowPercent="false" />
+                </div>
+            </div>
+        }
+
+        @if (ClusterText.OldFacts(service, Now) is { } old)
+        {
+            <p class="cluster-card__note">@old</p>
+        }
+    }
+
+    @if (service?.Generated is not null || Links?[LinkSet.Portal] is not null)
+    {
+        <p class="cluster-card__foot">
+            @if (service?.Generated is { } generated)
+            {
+                <time datetime="@TimeText.Iso(generated)" title="@TimeText.DateAndTime(generated, Zone)">@ClusterText.AsOf(generated, Now, Zone)</time>
+            }
+            @if (Links?[LinkSet.Portal] is { } portal)
+            {
+                <a class="cluster-card__link" href="@portal.AbsoluteUri" target="_blank" rel="noopener" title="@ClusterText.PortalTitle(Name)">AKS cluster in the Azure portal</a>
+            }
+        </p>
+    }
+</section>
+
+@code {
+    /// <summary>The last reading of Azure's facts.</summary>
+    [Parameter, EditorRequired]
+    public SourceReading<AksService> Reading { get; set; } = default!;
+
+    /// <summary>The cluster's name, for the link's title.</summary>
+    [Parameter]
+    public string? Name { get; set; }
+
+    /// <summary>The cluster's links of the topology: <c>portal</c> leads to the AKS cluster.</summary>
+    [Parameter]
+    public LinkSet? Links { get; set; }
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public DateTimeOffset Now { get; set; }
+
+    private static string? Percent(double? percent) => percent is { } value ? ClusterText.Percent(value) : null;
+}

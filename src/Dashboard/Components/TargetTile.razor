@@ -1,0 +1,222 @@
+<article class="tile tile--@Target.State.ToString().ToLowerInvariant()" aria-labelledby="@HeadingId">
+    <header class="tile__header">
+        <h4 id="@HeadingId">@Title</h4>
+        <DeepLink Href="StateLink" Title="@LinkText.For(LinkSet.LiveMetrics, Target.Name)" Class="deep--badge">
+            <StateBadge State="Target.State" />
+        </DeepLink>
+    </header>
+
+    <p class="tile__chips">
+        <span class="chip">@Subtitle</span>
+        @if (IsExpected)
+        {
+            <span class="chip chip--serving" title="@ServesHelp">serves traffic</span>
+        }
+    </p>
+
+    <p class="tile__address">
+        <span class="tile__name">
+            <DeepLink Href="NameLink" Title="@NameTitle">@ResourceName</DeepLink>
+        </span>
+        <a href="@Target.Url.AbsoluteUri" rel="noopener noreferrer">@Target.Url.Host</a>
+    </p>
+
+    <dl class="metrics">
+        <div>
+            <dt>HTTP status</dt>
+            <dd>@(Target.Last?.StatusCode?.ToString(CultureInfo.InvariantCulture) ?? None)</dd>
+        </div>
+        <div>
+            <dt>Latency</dt>
+            <dd>@(Target.Last?.LatencyMs is { } latency ? $"{latency} ms" : None)</dd>
+        </div>
+        <div>
+            <dt>Version</dt>
+            <dd>
+                @if (Target.Version is { } version)
+                {
+                    <DeepLink Href="@(VersionLink is { } link ? new Uri(link.Href) : null)" Title="@VersionLink?.Title">@version</DeepLink>
+                }
+                else
+                {
+                    @None
+                }
+            </dd>
+        </div>
+        <div>
+            <dt>Last check</dt>
+            <dd>
+                @if (Target.Last is { } last)
+                {
+                    <time datetime="@TimeText.Iso(last.CheckedAt)">@TimeText.Clock(last.CheckedAt, Zone)</time>
+                }
+                else
+                {
+                    @None
+                }
+            </dd>
+        </div>
+    </dl>
+
+    @* The web app's own numbers (its /_telemetry): the last minute, and its process. An app that reports none has
+       neither block; one that reports no process has the first only. *@
+    @if (Target.Telemetry is { } telemetry)
+    {
+        <div class="tile__block">
+            <h5 class="tile__label" id="@($"{HeadingId}-calls")" title="Counted by the web app itself over the last minute">Last minute</h5>
+            <dl class="metrics metrics--compact" aria-labelledby="@($"{HeadingId}-calls")">
+                <div class="metrics__wide">
+                    <dt>Requests</dt>
+                    <dd>
+                        <DeepLink Href="Target.Links[LinkSet.Performance]" Title="@LinkText.For(LinkSet.Performance, Target.Name)">@Count(telemetry.Requests)<span class="unit">/min</span></DeepLink>
+                        <TrendLine Trend="Trends.Requests(Target)" />
+                    </dd>
+                </div>
+                <div>
+                    <dt>p95</dt>
+                    <dd>@(telemetry.P95Ms is { } p95 ? $"{p95} ms" : None)</dd>
+                </div>
+                <div class="@(telemetry.Errors > 0 ? "metrics__warn" : null)">
+                    <dt>Errors</dt>
+                    <dd>
+                        @if (telemetry.Errors > 0)
+                        {
+                            <StateIcon State="HealthState.Unhealthy" />
+                        }
+                        <DeepLink Href="Target.Links[LinkSet.Failures]" Title="@LinkText.For(LinkSet.Failures, Target.Name)">@Count(telemetry.Errors)</DeepLink>
+                    </dd>
+                </div>
+                <div>
+                    <dt title="@SqlHelp(telemetry)">SQL</dt>
+                    <dd>
+                        <DeepLink Href="Target.Links[LinkSet.Dependencies]" Title="@LinkText.For(LinkSet.Dependencies, Target.Name)">@Count(telemetry.SqlOfTraffic)<span class="unit">/min</span></DeepLink>
+                    </dd>
+                </div>
+                @* Only where the deployable has a Front Door endpoint: without one nothing forwards. *@
+                @if (Deployable is { HasFrontDoor: true })
+                {
+                    <div>
+                        <dt title="Requests Front Door forwarded to this web app">Front Door</dt>
+                        <dd><span>@Count(telemetry.FromFrontDoor)<span class="unit">/min</span></span></dd>
+                    </div>
+                }
+            </dl>
+        </div>
+
+        @if (telemetry.Process is { } vitals)
+        {
+            <div class="tile__block">
+                <div class="tile__block-header">
+                    <h5 class="tile__label" id="@($"{HeadingId}-process")" title="As the web app's process reports them">Process</h5>
+                    @if (vitals.UptimeSeconds is { } uptime)
+                    {
+                        <span class="tile__uptime @(vitals.RestartedRecently ? "tile__uptime--restarted" : null)"
+                              title="@(vitals.RestartedRecently ? "The process started within the last five minutes: a deployment, a restart or a crash" : "How long the process has run")">
+                            @if (vitals.RestartedRecently)
+                            {
+                                <StateIcon State="HealthState.Unhealthy" />
+                            }
+                            @VitalsText.Uptime(uptime)
+                        </span>
+                    }
+                </div>
+                <dl class="metrics metrics--compact" aria-labelledby="@($"{HeadingId}-process")">
+                    <div class="metrics__wide">
+                        <dt>CPU</dt>
+                        <dd>
+                            @(vitals.CpuPercent is { } cpu ? VitalsText.Cpu(cpu) : None)
+                            <TrendLine Trend="Trends.Cpu(Target)" />
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Memory</dt>
+                        <dd title="@VitalsText.MemoryDetail(vitals)">@((vitals.WorkingSetMb ?? vitals.GcHeapMb) is { } memory ? VitalsText.Memory(memory) : None)</dd>
+                    </div>
+                    <div>
+                        <dt>In flight</dt>
+                        <dd title="Requests being answered at this moment">@(vitals.InFlight is { } inFlight ? Count(inFlight) : None)</dd>
+                    </div>
+                    <div class="@(vitals.ExceptionsPerMinute > 0 ? "metrics__warn" : null)">
+                        <dt>Exceptions</dt>
+                        <dd>
+                            @if (vitals.ExceptionsPerMinute is { } exceptions)
+                            {
+                                if (exceptions > 0)
+                                {
+                                    <StateIcon State="HealthState.Unhealthy" />
+                                }
+                                <DeepLink Href="Target.Links[LinkSet.Failures]" Title="@LinkText.For(LinkSet.Failures, Target.Name)">@Count(exceptions)<span class="unit">/min</span></DeepLink>
+                            }
+                            else
+                            {
+                                @None
+                            }
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        }
+    }
+
+    @if (Target.Last?.Detail is { } detail)
+    {
+        <p class="tile__detail">@detail</p>
+    }
+
+    <HistoryStrip History="Target.History" Zone="Zone" />
+</article>
+
+@code {
+    private const string None = "—";
+
+    [Parameter, EditorRequired]
+    public TargetStatus Target { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public string HeadingId { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    /// <summary>True for the node the serving decision expects to serve the traffic.</summary>
+    [Parameter]
+    public bool IsExpected { get; set; }
+
+    /// <summary>The deployable of the tile: its project and its build say where a node's version leads.</summary>
+    [Parameter]
+    public DeployableStatus? Deployable { get; set; }
+
+    private bool IsFrontDoor => Target.Kind == TargetKind.FrontDoor;
+
+    private string Title => IsFrontDoor ? "Front Door" : Target.Region ?? Target.Name;
+
+    /// <summary>The web app's name; for Front Door the endpoint's name, the first label of its host.</summary>
+    private string ResourceName => IsFrontDoor ? Target.Url.Host.Split('.')[0] : Target.Name;
+
+    private string Subtitle => IsFrontDoor ? "public address" : Target.Role ?? "node";
+
+    /// <summary>Why this node serves; a deployable's only node without a Front Door endpoint has no order to explain.</summary>
+    private string ServesHelp => Deployable is { HasFrontDoor: false, Nodes.Count: 1 }
+        ? "The deployable's only node, and it is healthy"
+        : "The first healthy node in priority order: primary, then standby";
+
+    private Uri? StateLink => IsFrontDoor ? null : Target.Links[LinkSet.LiveMetrics];
+
+    private Uri? NameLink => Target.Links[IsFrontDoor ? LinkSet.FrontDoor : LinkSet.Portal];
+
+    private string NameTitle => IsFrontDoor
+        ? LinkText.For(LinkSet.FrontDoor, Deployable?.Info.Name ?? ResourceName)
+        : LinkText.For(LinkSet.Portal, Target.Name);
+
+    /// <summary>A Front Door endpoint answers with the version of whichever node served: its version is no link.</summary>
+    private RuntimeLink? VersionLink => !IsFrontDoor && Deployable is { } deployable && Target.Version is { } version
+        ? RuntimePayloadBuilder.VersionLink(deployable, version)
+        : null;
+
+    private static string Count(int number) => BuildText.Count(number);
+
+    /// <summary>What the SQL number counts: the commands of the requests where the app tells them from the background ones.</summary>
+    private static string SqlHelp(TelemetrySnapshot telemetry) => telemetry.SplitsSql
+        ? $"SQL commands while handling requests: what traffic causes. Another {Count(telemetry.SqlBackground!.Value)} a minute run in the background (mostly the message bus polling the database); {Count(telemetry.Sql)} in all."
+        : "SQL commands the process ran, whatever caused them";
+}

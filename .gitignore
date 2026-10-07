@@ -1,0 +1,20 @@
+# Build output
+bin/
+obj/
+publish/
+artifacts/
+
+# Test output
+TestResults/
+*.trx
+coverage*.xml
+
+# Editors and operating systems
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+.DS_Store
+Thumbs.db

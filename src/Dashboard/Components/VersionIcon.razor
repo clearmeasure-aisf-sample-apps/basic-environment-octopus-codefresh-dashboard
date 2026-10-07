@@ -1,0 +1,22 @@
+@* The shape says the state as well as the colour: an equals sign (in sync), a not-equal sign (differs), dots (not
+   known). The words are next to it. *@
+<svg class="version-icon version-icon--@VersionLine.Level(State)" viewBox="0 0 16 16" width="16" height="16"
+     aria-hidden="true" focusable="false">
+    @switch (State)
+    {
+        case VersionState.InSync:
+            <path d="M3.5 5.8h9M3.5 10.2h9" />
+            break;
+        case VersionState.Differs:
+            <path d="M3.5 5.8h9M3.5 10.2h9M10.6 2.8L5.4 13.2" />
+            break;
+        default:
+            <path d="M3.9 8h.2M7.9 8h.2M11.9 8h.2" />
+            break;
+    }
+</svg>
+
+@code {
+    [Parameter, EditorRequired]
+    public VersionState State { get; set; }
+}

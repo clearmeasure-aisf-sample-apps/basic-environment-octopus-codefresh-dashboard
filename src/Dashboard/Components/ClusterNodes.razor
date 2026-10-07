@@ -1,0 +1,110 @@
+@* The nodes of the cluster, one row each: whether it is ready, the pressures it is under and whether it is cordoned
+   (each a chip with its word), what it is, and its CPU, memory and pods against what it offers. The table scrolls
+   sideways inside its own frame on a narrow screen. *@
+<section class="cluster-section" aria-labelledby="cluster-nodes-title">
+    <h3 id="cluster-nodes-title">Nodes</h3>
+    @if (Status.Nodes.Count == 0)
+    {
+        <p class="empty">The status file lists no node.</p>
+    }
+    else
+    {
+        <div class="table-scroll" role="region" aria-labelledby="cluster-nodes-title" tabindex="0">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th scope="col">Node</th>
+                        <th scope="col">State</th>
+                        <th scope="col">Pool</th>
+                        <th scope="col">Kubelet</th>
+                        <th scope="col">Age</th>
+                        <th scope="col" title="Used of what the node offers to pods, in cores">CPU</th>
+                        <th scope="col" title="Used of what the node offers to pods">Memory</th>
+                        <th scope="col" title="The pods the node runs, of how many it can take">Pods</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var node in Status.Nodes)
+                    {
+                        <tr>
+                            <th scope="row" class="grid__name">@node.Name</th>
+                            <td>
+                                <span class="grid__chips">
+                                    <ClusterBadge State="@(node.Ready ? ClusterState.Healthy : ClusterState.Unreachable)" Label="@(node.Ready ? "Ready" : "NotReady")" Quiet="true" />
+                                    @foreach (var pressure in node.Pressures)
+                                    {
+                                        <span class="chip chip--warn" title="@($"The node reports the condition {pressure}")">
+                                            <StateIcon State="HealthState.Unhealthy" />
+                                            @ClusterText.Pressure(pressure)
+                                        </span>
+                                    }
+                                    @if (node.Unschedulable)
+                                    {
+                                        <span class="chip" title="The node is unschedulable: it takes no new pod">cordoned</span>
+                                    }
+                                </span>
+                            </td>
+                            <td>
+                                <span class="grid__chips">
+                                    @(node.Pool ?? None)
+                                    @if (node.Size is { } size)
+                                    {
+                                        <span class="grid__minor">@size</span>
+                                    }
+                                    @if (node.Zone is { } zone)
+                                    {
+                                        <span class="chip" title="Availability zone">zone @zone</span>
+                                    }
+                                </span>
+                            </td>
+                            <td>@(node.KubeletVersion ?? None)</td>
+                            <td>
+                                @if (node.CreatedAt is { } created)
+                                {
+                                    <time datetime="@TimeText.Iso(created)" title="@($"Created {TimeText.DateAndTime(created, Zone)}")">@ClusterText.Age(created, AsOf)</time>
+                                }
+                                else
+                                {
+                                    @None
+                                }
+                            </td>
+                            <td>
+                                <UseCell Value="@ClusterText.NodeCpu(node.Cpu)" Percent="ClusterText.Share(node.Cpu.Usage, node.Cpu.Allocatable)"
+                                         Label="@($"CPU of {node.Name}, used of what it offers")" />
+                            </td>
+                            <td>
+                                <UseCell Value="@ClusterText.NodeMemory(node.Memory)" Percent="ClusterText.Share(node.Memory.Usage, node.Memory.Allocatable)"
+                                         Label="@($"Memory of {node.Name}, used of what it offers")" />
+                            </td>
+                            <td>
+                                <UseCell Value="@Pods(node)" Percent="ClusterText.Share(node.Pods, node.PodCapacity)"
+                                         Label="@($"Pods on {node.Name}, of how many it can take")" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    private const string None = "—";
+
+    [Parameter, EditorRequired]
+    public ClusterStatus Status { get; set; } = default!;
+
+    /// <summary>The moment the facts are of: ages are counted to it.</summary>
+    [Parameter, EditorRequired]
+    public DateTimeOffset AsOf { get; set; }
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    private static string? Pods(ClusterNode node) => (node.Pods, node.PodCapacity) switch
+    {
+        ({ } count, { } capacity) => ClusterText.Of(count, capacity),
+        ({ } count, null) => BuildText.Count(count),
+        _ => null,
+    };
+}

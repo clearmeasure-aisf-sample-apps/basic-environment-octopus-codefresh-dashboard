@@ -1,0 +1,28 @@
+@* The shape says the state as well as the colour: check, warning triangle, cross, dots. The label is next to it. *@
+<svg class="state-icon state-icon--@State.ToString().ToLowerInvariant()" viewBox="0 0 16 16" width="16" height="16"
+     aria-hidden="true" focusable="false">
+    @switch (State)
+    {
+        case HealthState.Healthy:
+            <circle cx="8" cy="8" r="7.5" />
+            <path class="state-icon__mark" d="M4.6 8.3l2.3 2.3 4.5-4.9" />
+            break;
+        case HealthState.Unhealthy:
+            <path d="M8 .9a1 1 0 0 1 .87.5l6.5 11.6a1 1 0 0 1-.87 1.5H1.5a1 1 0 0 1-.87-1.5L7.13 1.4A1 1 0 0 1 8 .9z" />
+            <path class="state-icon__mark" d="M8 5.4v4M8 11.7v.2" />
+            break;
+        case HealthState.Unreachable:
+            <circle cx="8" cy="8" r="7.5" />
+            <path class="state-icon__mark" d="M5.3 5.3l5.4 5.4M10.7 5.3l-5.4 5.4" />
+            break;
+        default:
+            <circle class="state-icon__ring" cx="8" cy="8" r="6.75" />
+            <path class="state-icon__mark" d="M4.9 8h.2M7.9 8h.2M10.9 8h.2" />
+            break;
+    }
+</svg>
+
+@code {
+    [Parameter, EditorRequired]
+    public HealthState State { get; set; }
+}

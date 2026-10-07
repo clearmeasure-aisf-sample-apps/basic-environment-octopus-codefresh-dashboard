@@ -1,0 +1,41 @@
+@* What is known about a deployable in an environment beyond its health: the code it runs (from its node) and how it
+   got there (from the delivery facts). Either card is there only when its source answered; without both, nothing. *@
+@{
+    var build = Deployable.Build;
+    var delivery = Monitor.Delivery?.Find(Environment.Name, Deployable.Info.Name);
+    var context = DeliveryText.Context(Deployable.Info.Name, Environment.Name);
+}
+@if (build is not null || delivery is not null)
+{
+    <div class="facts-row">
+        @if (build is not null)
+        {
+            <CodeCard Build="build" Context="@context" IdPrefix="@IdPrefix" Zone="Zone" Now="Now" />
+        }
+        @if (delivery is not null)
+        {
+            <DeliveryCard Entry="delivery" Environment="@Environment.Name" First="@Monitor.FirstEnvironment" Context="@context" IdPrefix="@IdPrefix" Zone="Zone" Now="Now" Changed="Monitor.Delivery?.Generated" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public DashboardMonitor Monitor { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public EnvironmentStatus Environment { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public DeployableStatus Deployable { get; set; } = default!;
+
+    /// <summary>Prefix of the element ids of the cards, unique on the page.</summary>
+    [Parameter, EditorRequired]
+    public string IdPrefix { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public DateTimeOffset Now { get; set; }
+}

@@ -1,0 +1,86 @@
+@* One line per deployable: the version the deployment pinned in Git, whether the nodes run it, and the links to the
+   project that deploys it and to the history of the pins. *@
+<div class="versions versions--@(Assessment is { } known ? Level(known.State) : "links")">
+    @if (Assessment is { } assessment)
+    {
+        <p class="versions__pinned" title="@PinnedHelp">
+            <VersionIcon State="assessment.State" />
+            <strong>@assessment.Headline</strong>
+        </p>
+        @if (assessment.Detail is { } detail)
+        {
+            <p class="versions__detail">@detail</p>
+        }
+    }
+    @if (ProjectUrl is not null || HistoryUrl is not null || LogsUrl is not null)
+    {
+        <p class="versions__links">
+            @if (ProjectUrl is { } project)
+            {
+                <a href="@project.AbsoluteUri" target="_blank" rel="noopener"
+                   aria-label="@($"Octopus project of {DeployableName} (opens in a new tab)")"
+                   title="@($"The Octopus Deploy project that deploys {DeployableName} (opens in a new tab)")">Octopus project</a>
+            }
+            @if (HistoryUrl is { } history)
+            {
+                <a href="@history.AbsoluteUri" target="_blank" rel="noopener"
+                   aria-label="@($"Pin history of {HistoryOf} (opens in a new tab)")"
+                   title="@($"The history of {(HistoryIsOwn ? PinFile : PinnedVersions.FileName)} of {HistoryOf} on GitHub (opens in a new tab)")">Pin history</a>
+            }
+            @if (LogsUrl is { } logs)
+            {
+                <a href="@logs.AbsoluteUri" target="_blank" rel="noopener"
+                   aria-label="@($"Requests of {DeployableName} in {EnvironmentName} in Application Insights Logs (opens in a new tab)")"
+                   title="@LinkText.For(LinkSet.Logs, $"{DeployableName} in {EnvironmentName}")">Requests in Logs</a>
+            }
+        </p>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Null when the topology names no file with the pin (no versions.json for the environment, no pinUrl for the
+    /// deployable): the line then holds the links only.
+    /// </summary>
+    [Parameter]
+    public VersionAssessment? Assessment { get; set; }
+
+    [Parameter, EditorRequired]
+    public string DeployableName { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public string EnvironmentName { get; set; } = default!;
+
+    [Parameter]
+    public Uri? ProjectUrl { get; set; }
+
+    [Parameter]
+    public Uri? HistoryUrl { get; set; }
+
+    /// <summary>The name of the file that holds the pin: versions.json, or the deployable's own Kustomize file.</summary>
+    [Parameter]
+    public string PinFile { get; set; } = PinnedVersions.FileName;
+
+    /// <summary>True when the history is the deployable's own (pinHistoryUrl), not that of the environment's versions.json.</summary>
+    [Parameter]
+    public bool HistoryIsOwn { get; set; }
+
+    /// <summary>The requests of the deployable's role as a Logs query (<c>links.logs</c> of the deployable); null without it.</summary>
+    [Parameter]
+    public Uri? LogsUrl { get; set; }
+
+    private string PinnedHelp =>
+        $"Pinned: the version the last deployment of {DeployableName} to {EnvironmentName} committed to "
+        + $"{PinFile} in the system repository. It is compared with the version each node reports.";
+
+    /// <summary>Whose pins the history shows: the environment's, or this deployable's in it.</summary>
+    private string HistoryOf => HistoryIsOwn ? $"{DeployableName} in {EnvironmentName}" : EnvironmentName;
+
+    /// <summary>The style of a state: in sync, differs, or neutral for everything that is not known.</summary>
+    internal static string Level(VersionState state) => state switch
+    {
+        VersionState.InSync => "insync",
+        VersionState.Differs => "differs",
+        _ => "unknown",
+    };
+}

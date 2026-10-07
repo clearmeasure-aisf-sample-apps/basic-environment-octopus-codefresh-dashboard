@@ -1,0 +1,106 @@
+# Build of the health dashboard (a Blazor WebAssembly site): compile with warnings as errors, run the unit tests,
+# publish the static site and keep it as the artifact dashboard-site (the content of the published wwwroot folder,
+# index.html at its root). A push to main also deploys the site to GitHub Pages, with this system's topology
+# (deploy/topology.json) next to index.html and the base address of the repository's Pages site.
+# The version is MAJOR_VERSION.MINOR_VERSION.<run number>.
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MAJOR_VERSION: 1
+  MINOR_VERSION: 0
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6.0.1
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Version
+        run: echo "VERSION=${MAJOR_VERSION}.${MINOR_VERSION}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: Restore
+        run: dotnet restore Dashboard.sln
+
+      - name: Build
+        run: dotnet build Dashboard.sln -c Release --no-restore -warnaserror "-p:Version=${VERSION}"
+
+      - name: Test
+        run: dotnet test Dashboard.sln -c Release --no-build
+
+      - name: Publish
+        run: dotnet publish src/Dashboard -c Release --no-restore -warnaserror "-p:Version=${VERSION}" -o publish
+
+      - name: Upload the site
+        uses: actions/upload-artifact@v7
+        with:
+          name: dashboard-site
+          path: publish/wwwroot
+          if-no-files-found: error
+
+      # The Pages site lives below /<repository>/, and it carries this system's topology instead of the sample.
+      - name: Prepare the Pages site
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          cp deploy/topology.json publish/wwwroot/topology.json
+          # The runtime view's files in the source are another system's sample; this system has none yet.
+          rm -rf publish/wwwroot/runtime
+          sed -i "s|<base href=\"/\" />|<base href=\"/${GITHUB_REPOSITORY#*/}/\" />|" publish/wwwroot/index.html
+          grep -q "<base href=\"/${GITHUB_REPOSITORY#*/}/\" />" publish/wwwroot/index.html
+          touch publish/wwwroot/.nojekyll
+
+      - name: Upload the Pages site
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: publish/wwwroot
+
+  # Deploys the site of a push to main to GitHub Pages.
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # The one check the default-branch ruleset requires: it reports the outcome of the build job under a fixed name.
+  result:
+    name: Build result
+    needs: build
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: The build job succeeded
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          echo "build: ${BUILD_RESULT}"
+          test "${BUILD_RESULT}" = "success"

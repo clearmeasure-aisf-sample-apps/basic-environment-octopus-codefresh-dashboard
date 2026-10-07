@@ -1,0 +1,208 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* The traffic button at the bottom of the page: a minute of representative requests from this browser through an
+   environment's public addresses, so the calls per minute on the runtime diagram move (js/traffic.js sends them). *@
+<section class="traffic" aria-labelledby="traffic-title">
+    <h2 id="traffic-title" class="traffic__title">Traffic</h2>
+    <div class="controls" role="group" aria-label="Traffic">
+        <label class="field">
+            <span>Environment</span>
+            <select value="@_environment" disabled="@Running" @onchange="OnEnvironmentChanged">
+                @foreach (var plan in _plans)
+                {
+                    <option value="@plan.Environment">@plan.Environment</option>
+                }
+            </select>
+        </label>
+        @if (Running)
+        {
+            <button type="button" class="button" @onclick="StopAsync">Stop traffic</button>
+        }
+        else
+        {
+            <button type="button" class="button" disabled="@(Selected is null)" title="@ButtonHelp" @onclick="StartAsync">Generate traffic</button>
+        }
+        <span class="traffic__status" role="status">@StatusText</span>
+    </div>
+    <p class="help">
+        @if (Selected is { } selected)
+        {
+            @($"{TrafficPlan.PerSecond} requests a second for {TrafficPlan.Seconds} s from this browser to {string.Join(", ", selected.Targets)}: ")
+        }
+        the start page and the app's representative reads, so the calls go @Route. The numbers count the last minute
+        and appear with the next check; during the traffic the page checks every @CheckEverySeconds s.
+    </p>
+</section>
+
+@code {
+    private const int CheckEverySeconds = 10;
+    private const string ButtonHelp = "Sends representative requests for one minute; press Stop traffic to end sooner";
+
+    private readonly CancellationTokenSource _stopping = new();
+    private IReadOnlyList<TrafficPlan> _plans = [];
+    private string? _environment;
+    private IJSObjectReference? _module;
+    private int[] _status = [0, 0, 0, 1];
+    private DateTimeOffset? _started;
+    private bool _pressed;
+    private bool _stopRequested;
+    private TrafficPlan? _running;
+
+    /// <summary>The page's monitor: its environments are the choices.</summary>
+    [Parameter, EditorRequired]
+    public DashboardMonitor Monitor { get; set; } = default!;
+
+    /// <summary>The environment chosen first: the one the runtime view shows, if any.</summary>
+    [Parameter]
+    public string? Environment { get; set; }
+
+    /// <summary>Asks the page for a round of checks, so the numbers follow the traffic.</summary>
+    [Parameter]
+    public EventCallback CheckNow { get; set; }
+
+    [Parameter, EditorRequired]
+    public TimeProvider Time { get; set; } = default!;
+
+    /// <summary>The page's log of what it observed: a start and an end of the traffic are events.</summary>
+    [Parameter]
+    public EventLog? Events { get; set; }
+
+    /// <summary>The way a call takes; Front Door is named only where the topology has one somewhere.</summary>
+    private string Route => Monitor.Topology.HasFrontDoor
+        ? "browser, Front Door, the origin that serves, the database"
+        : "browser, the app, the database";
+
+    private bool Running => _pressed && _status[3] == 0;
+
+    private TrafficPlan? Selected => _plans.FirstOrDefault(plan => plan.Environment == _environment);
+
+    private string StatusText
+    {
+        get
+        {
+            if (!_pressed)
+            {
+                return Selected is null ? "No environment has an address to call." : string.Empty;
+            }
+
+            var (sent, answered, failed) = (_status[0], _status[1], _status[2]);
+            var counts = $"{sent} sent, {answered} answered{(failed > 0 ? $", {failed} failed" : string.Empty)}";
+            if (!Running)
+            {
+                return $"Done: {counts}.";
+            }
+
+            var left = Math.Max(0, TrafficPlan.Seconds - (int)(Time.GetUtcNow() - _started!.Value).TotalSeconds);
+            return $"{counts}; {left} s left.";
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        _plans = [.. Monitor.Topology.Environments.Select(TrafficPlan.For).OfType<TrafficPlan>()];
+        if (!Running && (_environment is null || _plans.All(plan => plan.Environment != _environment)))
+        {
+            _environment = _plans.FirstOrDefault(plan => string.Equals(plan.Environment, Environment, StringComparison.OrdinalIgnoreCase))?.Environment
+                ?? _plans.FirstOrDefault()?.Environment;
+        }
+    }
+
+    private void OnEnvironmentChanged(ChangeEventArgs change) => _environment = change.Value?.ToString();
+
+    private async Task StartAsync()
+    {
+        if (Selected is not { } plan)
+        {
+            return;
+        }
+
+        _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/traffic.js");
+        await _module.InvokeVoidAsync("start", plan.Addresses.Select(address => address.AbsoluteUri).ToArray(), TrafficPlan.PerSecond, TrafficPlan.Seconds);
+        _pressed = true;
+        _started = Time.GetUtcNow();
+        _status = [0, 0, 0, 0];
+        _stopRequested = false;
+        _running = plan;
+        Events?.Add(EventDetector.Traffic(
+            plan.Environment,
+            $"Traffic started: {TrafficPlan.PerSecond} requests a second for {TrafficPlan.Seconds} s to {string.Join(", ", plan.Targets)}",
+            _started.Value));
+        _ = FollowAsync();
+    }
+
+    /// <summary>Reads the counts every second while the traffic runs, and asks for checks every few seconds.</summary>
+    private async Task FollowAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), Time);
+        var ticks = 0;
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_stopping.Token))
+            {
+                _status = await _module!.InvokeAsync<int[]>("status", _stopping.Token);
+                if (++ticks % CheckEverySeconds == 0 || !Running)
+                {
+                    await CheckNow.InvokeAsync();
+                }
+
+                StateHasChanged();
+                if (!Running)
+                {
+                    Ended();
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The page is going away.
+        }
+        catch (JSDisconnectedException)
+        {
+            // The page is going away.
+        }
+    }
+
+    /// <summary>Writes the end of a run to the log, once: by itself after its minute, or stopped by the viewer.</summary>
+    private void Ended()
+    {
+        if (_running is not { } plan)
+        {
+            return;
+        }
+
+        _running = null;
+        var (sent, answered, failed) = (_status[0], _status[1], _status[2]);
+        var counts = $"{sent} sent, {answered} answered{(failed > 0 ? $", {failed} failed" : string.Empty)}";
+        Events?.Add(EventDetector.Traffic(plan.Environment, $"Traffic {(_stopRequested ? "stopped" : "ended")}: {counts}", Time.GetUtcNow()));
+    }
+
+    private async Task StopAsync()
+    {
+        _stopRequested = true;
+        if (_module is { } module)
+        {
+            await module.InvokeVoidAsync("stop");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _stopping.CancelAsync();
+        if (_module is { } module)
+        {
+            try
+            {
+                await module.InvokeVoidAsync("stop");
+                await module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // The page is going away.
+            }
+        }
+
+        _stopping.Dispose();
+    }
+}

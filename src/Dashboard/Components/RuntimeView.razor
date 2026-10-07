@@ -1,0 +1,275 @@
+@implements IAsyncDisposable
+@inject RuntimeLoader Loader
+@inject IJSRuntime JS
+
+@* The runtime view: the environment's C4 deployment diagram, rendered by PlantUML at deploy time, updated in place
+   from the same monitor as the health view (js/runtime.js draws; RuntimePayloadBuilder decides what). *@
+<section class="runtime" aria-labelledby="runtime-title">
+    <header class="runtime__header">
+        <h2 id="runtime-title">Runtime@(Current is { } shown ? $": {shown.Name}" : string.Empty)</h2>
+        @if (_index?.Index is { } index && index.Environments.Count > 0)
+        {
+            <div class="runtime__environments" role="group" aria-label="Environment">
+                @foreach (var entry in index.Environments)
+                {
+                    var selected = ReferenceEquals(entry, Current);
+                    <button type="button" class="button @(selected ? "button--selected" : "button--quiet")" aria-pressed="@(selected ? "true" : "false")"
+                            @onclick="() => SelectAsync(entry.Name)">@entry.Name</button>
+                }
+            </div>
+            <button type="button" class="button button--quiet runtime__fit" aria-pressed="@(_fit ? "true" : "false")"
+                    title="Fit the diagram to the width of the page (down to three quarters of its size), or show it at its actual size; it scrolls sideways when it does not fit"
+                    @onclick="() => _fit = !_fit">Fit to width</button>
+        }
+    </header>
+
+    @if (_index is null)
+    {
+        <p class="empty" role="status">Loading the runtime diagrams</p>
+    }
+    else if (_index.Availability == RuntimeAvailability.NotDeployed)
+    {
+        <p class="empty runtime__absent" role="status">
+            The runtime diagram is not available for this deployment: the site has no <code>runtime/</code> folder. The
+            deployment of a newer dashboard release renders it. The Health view shows every node.
+        </p>
+    }
+    else if (_index.Index is not { } loaded)
+    {
+        <section class="problem" role="alert">
+            <h3>The runtime diagrams could not be read</h3>
+            <ul>
+                @foreach (var error in _index.Errors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        </section>
+    }
+    else if (loaded.Environments.Count == 0)
+    {
+        <p class="empty">The deployment rendered no runtime diagram: system.json has no environment.</p>
+    }
+    else
+    {
+        <p class="help runtime__help">
+            @* Front Door, its route and the regions are named only where the topology has a Front Door somewhere. *@
+            @if (Monitor.Topology.HasFrontDoor)
+            {
+                <text>
+                    Live, from the checks of this page: the state of every web app and Front Door endpoint, which region serves
+                    traffic, the route Front Door takes and the versions next to the pinned ones. Drawn when the dashboard was
+                    deployed: the resources, their names, sizes and regions. The database takes no call from the browser: it is
+                    reachable when the health check of a web app that uses it passes. Calls per minute are the last minute as each
+                    web app counts it (its <code>/_telemetry</code>): requests Front Door forwarded, Front Door's health probes and
+                    SQL commands; a dash where a web app reports none.
+                </text>
+            }
+            else
+            {
+                <text>
+                    Live, from the checks of this page: the state of every web app, whether it serves traffic and the versions
+                    next to the pinned ones. Drawn when the dashboard was deployed: the resources, their names and sizes. The
+                    database takes no call from the browser: it is reachable when the health check of a web app that uses it
+                    passes. Calls per minute are the last minute as each web app counts it (its <code>/_telemetry</code>):
+                    requests and SQL commands; a dash where a web app reports none.
+                </text>
+            }
+            "Generate traffic" at the bottom of the page makes them move.
+            The small line next to a number is its trend over the last checks of this page. An underlined number or name
+            is a link: it opens the Azure portal or Octopus Deploy in a new tab, which ask you to sign in.
+        </p>
+        @if (_diagram is { IsValid: false } broken)
+        {
+            <section class="problem" role="alert">
+                <h3>The runtime diagram of @broken.Environment could not be read</h3>
+                <ul>
+                    @foreach (var error in broken.Errors)
+                    {
+                        <li>@error</li>
+                    }
+                </ul>
+            </section>
+        }
+        else if (_diagram is null)
+        {
+            <p class="empty" role="status">Loading the runtime diagram of @Current?.Name</p>
+        }
+
+        @if (_mountProblem is { } problem)
+        {
+            <p class="problem" role="alert">@problem</p>
+        }
+
+        @* js/runtime.js owns the content of this element: Blazor renders it empty and never touches its children. *@
+        <div class="runtime__canvas @(_fit ? "runtime__canvas--fit" : null)" tabindex="0" role="region"
+             aria-label="@($"Runtime diagram of {Current?.Name}; scrolls sideways at its actual size")" hidden="@(_diagram is not { IsValid: true })">
+            <div class="runtime__svg" @ref="_host"></div>
+        </div>
+
+        @if (_missing.Count > 0)
+        {
+            <p class="runtime__missing" role="status">
+                The diagram lacks @string.Join(", ", _missing): the manifest and the SVG of this deployment do not match.
+            </p>
+        }
+
+        @* Under the diagram: what is known about the shown environment beyond its health (its resources in the Azure
+           portal, the code its deployables run, how they were delivered). Nothing where no source answered. *@
+        @if (Shown is { } facts)
+        {
+            <section class="runtime__facts" aria-label="@($"Code and delivery of {facts.Name}")">
+                <EnvironmentLinks Links="facts.Info.Links" Environment="@facts.Name" />
+                @{
+                    var deployableIndex = 0;
+                }
+                @foreach (var deployable in facts.Deployables)
+                {
+                    <DeployableFacts @key="deployable" Monitor="Monitor" Environment="facts" Deployable="deployable"
+                                     IdPrefix="@($"runtime-app-{deployableIndex++}")" Zone="Zone" Now="Now" />
+                }
+                <EnvironmentDelivery Monitor="Monitor" Environment="facts" IdPrefix="runtime" Zone="Zone" Now="Now" />
+            </section>
+        }
+
+        <RuntimeLegend />
+        @if (loaded.PlantUml is { } version)
+        {
+            <p class="help">Rendered with PlantUML @version when the dashboard was deployed.</p>
+        }
+    }
+</section>
+
+@code {
+    private readonly CancellationTokenSource _stopping = new();
+    private readonly Dictionary<string, RuntimeDiagram> _diagrams = new(StringComparer.Ordinal);
+    private RuntimeIndexResult? _index;
+    private RuntimeDiagram? _diagram;
+    private IJSObjectReference? _module;
+    private ElementReference _host;
+    private RuntimeDiagram? _mounted;
+    private string? _lastPayload;
+    private string? _mountProblem;
+    private List<string> _missing = [];
+    private bool _fit = true;
+
+    /// <summary>The monitor of the page: the same checks the health view shows.</summary>
+    [Parameter, EditorRequired]
+    public DashboardMonitor Monitor { get; set; } = default!;
+
+    /// <summary>The environment the address names; the first one of the index when it names none or an unknown one.</summary>
+    [Parameter]
+    public string? Environment { get; set; }
+
+    [Parameter]
+    public EventCallback<string> EnvironmentChanged { get; set; }
+
+    /// <summary>The page's own address: the static site that serves it is "this page".</summary>
+    [Parameter, EditorRequired]
+    public Uri Page { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    /// <summary>The moment of this rendering: "2 h ago" is counted from it.</summary>
+    [Parameter]
+    public DateTimeOffset Now { get; set; }
+
+    /// <summary>The monitor's environment of the diagram that is shown; null while none is, or when the topology has none of that name.</summary>
+    private EnvironmentStatus? Shown => _diagram is { IsValid: true } diagram
+        ? Monitor.Environments.FirstOrDefault(status => string.Equals(status.Name, diagram.Manifest!.Environment, StringComparison.OrdinalIgnoreCase))
+        : null;
+
+    private RuntimeIndexEntry? Current => _index?.Index?.Environments is { Count: > 0 } entries
+        ? entries.FirstOrDefault(entry => string.Equals(entry.Name, Environment, StringComparison.OrdinalIgnoreCase)) ?? entries[0]
+        : null;
+
+    public async ValueTask DisposeAsync()
+    {
+        await _stopping.CancelAsync();
+        if (_module is { } module)
+        {
+            try
+            {
+                await module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // The page is going away.
+            }
+        }
+
+        _stopping.Dispose();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _index = await Loader.LoadIndexAsync(_stopping.Token);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Current is not { } entry)
+        {
+            _diagram = null;
+            return;
+        }
+
+        if (!_diagrams.TryGetValue(entry.Name, out var diagram))
+        {
+            _diagram = null;
+            diagram = await Loader.LoadDiagramAsync(entry, _stopping.Token);
+            _diagrams[entry.Name] = diagram;
+        }
+
+        _diagram = diagram;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_diagram is not { IsValid: true } diagram)
+        {
+            return;
+        }
+
+        _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/runtime.js");
+        if (!ReferenceEquals(_mounted, diagram))
+        {
+            _mountProblem = await _module.InvokeAsync<string?>("mount", _host, diagram.Svg);
+            _mounted = diagram;
+            _lastPayload = null;
+            if (_mountProblem is not null)
+            {
+                StateHasChanged();
+            }
+        }
+
+        if (_mountProblem is not null)
+        {
+            return;
+        }
+
+        var environment = Shown;
+        var payload = RuntimePayloadBuilder.Build(diagram.Manifest!, environment, Page, Zone).ToJson();
+        if (payload == _lastPayload)
+        {
+            return;
+        }
+
+        _lastPayload = payload;
+        var missing = (await _module.InvokeAsync<string[]>("update", _host, payload)).ToList();
+        if (!missing.SequenceEqual(_missing))
+        {
+            _missing = missing;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SelectAsync(string environment)
+    {
+        if (!string.Equals(environment, Current?.Name, StringComparison.Ordinal))
+        {
+            await EnvironmentChanged.InvokeAsync(environment);
+        }
+    }
+}

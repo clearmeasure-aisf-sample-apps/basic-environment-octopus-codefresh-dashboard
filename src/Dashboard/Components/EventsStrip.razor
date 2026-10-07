@@ -1,0 +1,95 @@
+@* "What just happened": what this page observed since it was opened, newest first. The page finds the events by
+   comparing each check with the one before (EventDetector); nothing here comes from a server's log. *@
+<section class="events" aria-labelledby="events-title">
+    <header class="events__header">
+        <h2 id="events-title" class="events__title">What just happened</h2>
+        <p class="events__scope">
+            Observed by this page since it was opened at
+            <time datetime="@TimeText.Iso(Opened)">@TimeText.Clock(Opened, Zone)</time>: state changes, restarts,
+            deployments, failovers, pins@(Monitor.Cluster is null ? " and traffic" : ", traffic and what changed in the cluster").
+            The last @EventLog.DefaultCapacity are kept.
+        </p>
+    </header>
+    @if (Monitor.Delivery?.Failover is { } failover)
+    {
+        <p class="events__failover">
+            <strong>Last failover test:</strong>
+            <span title="@(failover.At is { } at ? TimeText.DateAndTime(at, Zone) : null)">@DeliveryText.Failover(failover, Now)</span>
+        </p>
+    }
+    @{
+        var events = Events.Newest;
+    }
+    @* A log: additions are announced politely, in order. It scrolls inside its own frame, so it takes the keyboard. *@
+    <div class="events__log" role="log" aria-labelledby="events-title" tabindex="0">
+        @if (events.Count == 0)
+        {
+            <p class="empty">Nothing yet: every endpoint is as the first check found it.</p>
+        }
+        else
+        {
+            <ol class="events__list">
+                @foreach (var entry in events)
+                {
+                    <li class="event event--@entry.Level.ToString().ToLowerInvariant()">
+                        <time class="event__time" datetime="@TimeText.Iso(entry.At)">@TimeText.Clock(entry.At, Zone)</time>
+                        <span class="event__mark" title="@LevelWord(entry.Level)">
+                            @switch (entry.Level)
+                            {
+                                case EventLevel.Good:
+                                    <StateIcon State="HealthState.Healthy" />
+                                    break;
+                                case EventLevel.Warning:
+                                    <StateIcon State="HealthState.Unhealthy" />
+                                    break;
+                                case EventLevel.Problem:
+                                    <StateIcon State="HealthState.Unreachable" />
+                                    break;
+                                default:
+                                    <StateIcon State="HealthState.Pending" />
+                                    break;
+                            }
+                        </span>
+                        <span class="event__where">@Where(entry)</span>
+                        <span class="event__text">@entry.Text</span>
+                    </li>
+                }
+            </ol>
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public EventLog Events { get; set; } = default!;
+
+    /// <summary>The page's monitor: its delivery facts name the last failover test.</summary>
+    [Parameter, EditorRequired]
+    public DashboardMonitor Monitor { get; set; } = default!;
+
+    /// <summary>When the page was opened.</summary>
+    [Parameter, EditorRequired]
+    public DateTimeOffset Opened { get; set; }
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public DateTimeOffset Now { get; set; }
+
+    private static string Where(DashboardEvent entry) => (entry.Environment, entry.Node) switch
+    {
+        ({ } environment, { } node) => $"{environment} · {node}",
+        ({ } environment, null) => environment,
+        (null, { } node) => node,
+        _ => "page",
+    };
+
+    private static string LevelWord(EventLevel level) => level switch
+    {
+        EventLevel.Good => "Good news",
+        EventLevel.Warning => "Worth a look",
+        EventLevel.Problem => "A problem",
+        _ => "For information",
+    };
+}

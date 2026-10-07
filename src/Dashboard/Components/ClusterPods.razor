@@ -1,0 +1,85 @@
+@* The pods of the cluster by namespace (ClusterGroups): first the namespaces of the topology's environments, in the
+   topology's order and always open, then every other namespace by name as "Platform", behind a details element that
+   is open when one of its pods is unhealthy. *@
+<section class="cluster-section" aria-labelledby="cluster-pods-title">
+    <header class="cluster-section__header">
+        <h3 id="cluster-pods-title">Pods</h3>
+        @if (Links?[LinkSet.Workloads] is { } workloads)
+        {
+            <p class="resource-links">
+                <a href="@workloads.AbsoluteUri" target="_blank" rel="noopener" title="@ClusterText.WorkloadsTitle(Name)">Workloads in the Azure portal</a>
+            </p>
+        }
+    </header>
+
+    @{
+        var index = 0;
+    }
+    @foreach (var group in Groups.Environments)
+    {
+        var id = $"cluster-env-{index++}";
+        <section class="namespace" aria-labelledby="@id">
+            <header class="namespace__header">
+                <h4 id="@id">@group.Environment!.Name <span class="namespace__name">· namespace <code>@group.Name</code></span></h4>
+                @if (group.Environment.Tier is { } tier)
+                {
+                    <span class="chip">@tier</span>
+                }
+            </header>
+            <PodTable Group="group" LabelledBy="@id" AsOf="AsOf" Zone="Zone" />
+        </section>
+    }
+
+    @if (Groups.Platform.Count > 0)
+    {
+        <details class="platform" open="@Groups.PlatformNeedsALook">
+            <summary class="platform__summary">
+                <h4 id="cluster-platform">@ClusterText.PlatformSummary(Groups)</h4>
+                @if (Groups.PlatformNeedsALook)
+                {
+                    var unhealthy = Groups.Platform.Sum(space => space.Unhealthy);
+                    <span class="platform__warn">
+                        <StateIcon State="HealthState.Unhealthy" />
+                        @unhealthy unhealthy
+                    </span>
+                }
+            </summary>
+            <p class="help">Every namespace that belongs to no environment of the topology: the cluster's own services and what the system installs next to its apps.</p>
+            @{
+                var platformIndex = 0;
+            }
+            @foreach (var group in Groups.Platform)
+            {
+                var id = $"cluster-platform-{platformIndex++}";
+                <section class="namespace namespace--platform" aria-labelledby="@id">
+                    <h5 class="namespace__platform-name" id="@id"><code>@group.Name</code></h5>
+                    <PodTable Group="group" LabelledBy="@id" AsOf="AsOf" Zone="Zone" />
+                </section>
+            }
+        </details>
+    }
+    else if (Groups.Environments.Count == 0)
+    {
+        <p class="empty">The status file lists no namespace.</p>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public ClusterGroups Groups { get; set; } = default!;
+
+    /// <summary>The cluster's name, for the link's title.</summary>
+    [Parameter]
+    public string? Name { get; set; }
+
+    /// <summary>The cluster's links of the topology: <c>workloads</c> leads to its workloads in the Azure portal.</summary>
+    [Parameter]
+    public LinkSet? Links { get; set; }
+
+    /// <summary>The moment the facts are of: ages are counted to it.</summary>
+    [Parameter, EditorRequired]
+    public DateTimeOffset AsOf { get; set; }
+
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = default!;
+}

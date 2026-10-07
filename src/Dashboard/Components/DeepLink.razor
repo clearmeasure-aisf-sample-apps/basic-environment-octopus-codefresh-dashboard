@@ -1,0 +1,24 @@
+@* A number or a name that leads somewhere when the topology has a link for it, and is plain content when it has none.
+   The link opens a new tab; its title says where it goes and that the destination asks for a sign-in. *@
+@if (Href is { } address)
+{
+    <a class="deep @Class" href="@address.AbsoluteUri" target="_blank" rel="noopener" title="@Title">@ChildContent</a>
+}
+else
+{
+    @ChildContent
+}
+
+@code {
+    [Parameter]
+    public Uri? Href { get; set; }
+
+    [Parameter]
+    public string? Title { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    [Parameter, EditorRequired]
+    public RenderFragment ChildContent { get; set; } = default!;
+}

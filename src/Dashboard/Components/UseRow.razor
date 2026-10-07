@@ -1,0 +1,69 @@
+@* One resource of the cluster card or of Azure's numbers: its name, the number in words, its share as a bar, and
+   under it, thinner, what is requested. A dash without a number. *@
+<div class="use @(ClusterText.IsHigh(Percent) ? "use--high" : null)">
+    <p class="use__head">
+        <span class="use__label">@Name</span>
+        <span class="use__value">
+            @if (ClusterText.IsHigh(Percent))
+            {
+                <StateIcon State="HealthState.Unhealthy" />
+            }
+            @if (Value is { } value)
+            {
+                @value
+            }
+            else
+            {
+                <span class="use-cell__none" title="No measurement">—</span>
+            }
+        </span>
+        @if (Percent is { } percent && ShowPercent)
+        {
+            <span class="use__percent">@ClusterText.Percent(percent)</span>
+        }
+        <TrendLine Trend="Trend" />
+    </p>
+    <Meter Label="@Label" Percent="Percent" ValueText="@(Percent is { } share && ShowPercent ? $"{Value}, {ClusterText.Percent(share)}" : Value ?? string.Empty)" />
+    @if (Requested is { } requested)
+    {
+        <p class="use__sub">
+            <Meter Label="@(RequestedLabel ?? Label)" Percent="RequestedPercent" ValueText="@requested" Thin="true" MarkHigh="false" />
+            <span>@requested</span>
+        </p>
+    }
+</div>
+
+@code {
+    /// <summary>The name in the row: "CPU".</summary>
+    [Parameter, EditorRequired]
+    public string Name { get; set; } = default!;
+
+    /// <summary>The bar's accessible name: "CPU used of what the nodes offer".</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = default!;
+
+    /// <summary>The number in words; null shows a dash.</summary>
+    [Parameter]
+    public string? Value { get; set; }
+
+    [Parameter]
+    public double? Percent { get; set; }
+
+    /// <summary>False where the value is the percentage itself.</summary>
+    [Parameter]
+    public bool ShowPercent { get; set; } = true;
+
+    /// <summary>"63 % requested"; null without that line.</summary>
+    [Parameter]
+    public string? Requested { get; set; }
+
+    [Parameter]
+    public double? RequestedPercent { get; set; }
+
+    /// <summary>The thinner bar's accessible name: "CPU the pods request of what the nodes offer".</summary>
+    [Parameter]
+    public string? RequestedLabel { get; set; }
+
+    [Parameter]
+    public Trend? Trend { get; set; }
+}
