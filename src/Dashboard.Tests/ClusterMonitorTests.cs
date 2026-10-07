@@ -53,8 +53,8 @@ public class ClusterMonitorTests
         var handler = new StubHandler(request => Answer(request, Status(), ClusterFixture.Sample("aks.json")));
         var monitor = Monitor(handler);
 
-        Assert.Equal(SourceState.Pending, monitor.Cluster!.Status!.State);
-        Assert.Equal(SourceState.Pending, monitor.Cluster.Service!.State);
+        Assert.Equal(SourceState.Pending, monitor.Clusters[0].Status!.State);
+        Assert.Equal(SourceState.Pending, monitor.Clusters[0].Service!.State);
         await monitor.CheckAllAsync(ProbeKind.Health, CancellationToken.None);
         await monitor.CheckAllAsync(ProbeKind.Health, CancellationToken.None);
 
@@ -63,10 +63,10 @@ public class ClusterMonitorTests
         Assert.All(
             handler.Requests.Where(request => request.RequestUri!.Host != "tdd.example.net"),
             request => Assert.Equal("no-store", NodeProberTests.FetchOption(request, "cache")));
-        Assert.Equal(SourceState.Read, monitor.Cluster.Status!.State);
-        Assert.Equal(6, monitor.Cluster.Status.Value!.Pods.Count());
-        Assert.Equal("Available", monitor.Cluster.Service!.Value!.Availability!.State);
-        Assert.Equal("aks-demo", monitor.Cluster.Info.Name);
+        Assert.Equal(SourceState.Read, monitor.Clusters[0].Status!.State);
+        Assert.Equal(6, monitor.Clusters[0].Status!.Value!.Pods.Count());
+        Assert.Equal("Available", monitor.Clusters[0].Service!.Value!.Availability!.State);
+        Assert.Equal("aks-demo", monitor.Clusters[0].Info.Name);
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class ClusterMonitorTests
 
         await monitor.CheckAllAsync(ProbeKind.Health, CancellationToken.None);
 
-        Assert.Null(monitor.Cluster);
+        Assert.Empty(monitor.Clusters);
         Assert.Equal(["https://tdd.example.net/_healthcheck", "https://tdd.example.net/_version"], handler.RequestedUrls.Order());
         Assert.Empty(monitor.Events.Newest);
     }
@@ -85,7 +85,7 @@ public class ClusterMonitorTests
     [Fact]
     public void AMonitorWithoutAReaderHasNoClusterEither()
     {
-        Assert.Null(Monitor(new StubHandler(request => Answer(request, null, null)), withReader: false).Cluster);
+        Assert.Empty(Monitor(new StubHandler(request => Answer(request, null, null)), withReader: false).Clusters);
     }
 
     [Fact]
@@ -96,8 +96,8 @@ public class ClusterMonitorTests
 
         await monitor.CheckAllAsync(ProbeKind.Health, CancellationToken.None);
 
-        Assert.Null(monitor.Cluster!.Service);
-        Assert.Equal(SourceState.Read, monitor.Cluster.Status!.State);
+        Assert.Null(monitor.Clusters[0].Service);
+        Assert.Equal(SourceState.Read, monitor.Clusters[0].Status!.State);
         Assert.DoesNotContain(ServiceUrl, handler.RequestedUrls);
     }
 
@@ -108,10 +108,10 @@ public class ClusterMonitorTests
 
         await monitor.CheckAllAsync(ProbeKind.Health, CancellationToken.None);
 
-        Assert.Equal(new SourceReading<ClusterStatus>(SourceState.Missing, Detail: "the address answered HTTP 404"), monitor.Cluster!.Status);
-        Assert.Equal(SourceState.Missing, monitor.Cluster.Service!.State);
+        Assert.Equal(new SourceReading<ClusterStatus>(SourceState.Missing, Detail: "the address answered HTTP 404"), monitor.Clusters[0].Status);
+        Assert.Equal(SourceState.Missing, monitor.Clusters[0].Service!.State);
         Assert.Empty(ClusterEvents(monitor));
-        Assert.Empty(monitor.Cluster.Samples);
+        Assert.Empty(monitor.Clusters[0].Samples);
     }
 
     [Fact]
@@ -129,8 +129,8 @@ public class ClusterMonitorTests
 
         Assert.Equal(
             new SourceReading<ClusterStatus>(SourceState.Unavailable, Detail: "the browser could not read an answer (network or CORS)"),
-            monitor.Cluster!.Status);
-        Assert.Equal(new SourceReading<AksService>(SourceState.Malformed, Detail: "the file is not valid JSON"), monitor.Cluster.Service);
+            monitor.Clusters[0].Status);
+        Assert.Equal(new SourceReading<AksService>(SourceState.Malformed, Detail: "the file is not valid JSON"), monitor.Clusters[0].Service);
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public class ClusterMonitorTests
         await monitor.CheckAllAsync(ProbeKind.Health, CancellationToken.None);
 
         Assert.Equal(["The collector in the cluster stopped writing: the status file is stale"], ClusterEvents(monitor));
-        Assert.Equal(ClusterLiveness.Stale, ClusterAssessment.LivenessOf(monitor.Cluster!.Status!, _time.GetUtcNow()));
+        Assert.Equal(ClusterLiveness.Stale, ClusterAssessment.LivenessOf(monitor.Clusters[0].Status!, _time.GetUtcNow()));
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public class ClusterMonitorTests
         await monitor.CheckAllAsync(ProbeKind.Health, CancellationToken.None);
 
         Assert.Equal(["The power state of the AKS service: Running → Stopped"], ClusterEvents(monitor));
-        Assert.True(monitor.Cluster!.Service!.Value!.IsStopped);
+        Assert.True(monitor.Clusters[0].Service!.Value!.IsStopped);
     }
 
     [Fact]
@@ -221,7 +221,7 @@ public class ClusterMonitorTests
     {
         string? status = Status();
         var monitor = Monitor(new StubHandler(request => Answer(request, status, null)));
-        var cluster = monitor.Cluster!;
+        var cluster = Assert.Single(monitor.Clusters);
 
         await monitor.CheckAllAsync(ProbeKind.Health, CancellationToken.None);
         Assert.Null(cluster.CpuTrend);
@@ -243,7 +243,7 @@ public class ClusterMonitorTests
         var changes = 0;
         monitor.Changed += () => Interlocked.Increment(ref changes);
 
-        await monitor.Cluster!.CheckAsync(CancellationToken.None);
+        await monitor.Clusters[0].CheckAsync(CancellationToken.None);
 
         Assert.Equal(2, changes);
     }

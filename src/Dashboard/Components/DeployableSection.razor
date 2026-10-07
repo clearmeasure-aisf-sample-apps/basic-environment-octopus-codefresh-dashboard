@@ -1,8 +1,11 @@
 @{
     var assessment = Deployable.Assess(out var expected);
-    var serving = assessment.State.ToString().ToLowerInvariant();
-    var disagrees = assessment.FrontDoor == FrontDoorAgreement.Disagrees;
-    var versions = Environment.AssessVersions(Deployable);
+
+    // None of its nodes answers, and its cluster is known to be stopped: asleep, said in place of "Not serving".
+    var asleep = ClusterSleep.CoversAll(Sleep, Deployable.Nodes.Select(node => node.State)) ? Sleep : null;
+    var serving = asleep is not null ? "asleep" : assessment.State.ToString().ToLowerInvariant();
+    var disagrees = asleep is null && assessment.FrontDoor == FrontDoorAgreement.Disagrees;
+    var versions = Environment.AssessVersions(Deployable, Sleep);
     var logs = Deployable.Info.Links?[LinkSet.Logs];
     var history = Environment.PinHistoryOf(Deployable);
     var hasVersionLine = versions is not null || Deployable.Info.ProjectUrl is not null || history is not null || logs is not null;
@@ -16,6 +19,9 @@
                     <svg class="serving__icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
                         @switch (assessment.State)
                         {
+                            case var _ when asleep is not null:
+                                <path d="M13.6 9.3A5.9 5.9 0 1 1 6.7 2.4a4.9 4.9 0 0 0 6.9 6.9z" />
+                                break;
                             case ServingState.Primary:
                                 <path d="M3 8.5l3.2 3.2L13 4.6" />
                                 break;
@@ -30,13 +36,17 @@
                                 break;
                         }
                     </svg>
-                    <strong>@assessment.Headline</strong>
+                    <strong>@(asleep?.Headline ?? assessment.Headline)</strong>
                 </p>
-                @if (assessment.FailoverDetail is { } detail)
+                @if (asleep is not null)
+                {
+                    <p class="serving__detail">@asleep.Detail(Now, Zone)</p>
+                }
+                else if (assessment.FailoverDetail is { } detail)
                 {
                     <p class="serving__detail">@detail</p>
                 }
-                @if (assessment.FrontDoorText is { } frontDoor)
+                @if (asleep is null && assessment.FrontDoorText is { } frontDoor)
                 {
                     <p class="serving__frontdoor">
                         @if (disagrees)
@@ -72,7 +82,7 @@
             @foreach (var target in Deployable.Targets)
             {
                 var id = $"{IdPrefix}-tile-{index++}";
-                <TargetTile @key="target" Target="target" HeadingId="@id" Zone="Zone" IsExpected="ReferenceEquals(target, expected)" Deployable="Deployable" />
+                <TargetTile @key="target" Target="target" HeadingId="@id" Zone="Zone" IsExpected="ReferenceEquals(target, expected)" Deployable="Deployable" Sleep="Sleep" />
             }
         </div>
     }
@@ -87,6 +97,13 @@
     /// <summary>The environment of the deployable: it holds the versions pinned in Git.</summary>
     [Parameter, EditorRequired]
     public EnvironmentStatus Environment { get; set; } = default!;
+
+    /// <summary>
+    /// The sleep of the cluster that hosts the environment (<see cref="DashboardMonitor.SleepOf"/>); null when none
+    /// is known to be stopped, and the section is then as the checks say.
+    /// </summary>
+    [Parameter]
+    public ClusterSleep? Sleep { get; set; }
 
     /// <summary>The page's monitor: it holds the delivery facts of the system.</summary>
     [Parameter, EditorRequired]

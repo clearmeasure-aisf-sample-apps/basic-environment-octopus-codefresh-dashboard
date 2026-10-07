@@ -1,3 +1,4 @@
+using System.Globalization;
 using Dashboard.Cluster;
 
 namespace Dashboard.Health;
@@ -12,6 +13,7 @@ public sealed class DashboardMonitor
     private readonly PinnedVersionsReader _versions;
     private readonly TimeProvider _time;
     private readonly List<(EnvironmentStatus Environment, DeployableStatus Deployable, TargetStatus Target)> _targets;
+    private readonly Dictionary<EnvironmentStatus, ClusterMonitor> _hosts = [];
     private DateTimeOffset? _deliveryReadAt;
 
     /// <param name="events">
@@ -19,8 +21,8 @@ public sealed class DashboardMonitor
     /// own without one.
     /// </param>
     /// <param name="cluster">
-    /// What reads the cluster's files, for a topology with <c>cluster</c>; without it, or without a cluster in the
-    /// topology, the monitor has no cluster and reads nothing for one.
+    /// What reads the clusters' files, for a topology with <c>cluster</c> or <c>clusters</c>; without it, or without a
+    /// cluster in the topology, the monitor has no cluster and reads nothing for one.
     /// </param>
     public DashboardMonitor(
         Topology topology,
@@ -44,10 +46,29 @@ public sealed class DashboardMonitor
                from target in deployable.Targets
                select (environment, deployable, target),
         ];
-        if (topology.Cluster is { } info && cluster is not null)
+        if (cluster is not null)
         {
-            Cluster = new ClusterMonitor(info, topology.Environments, cluster, time, Events);
-            Cluster.Changed += () => Changed?.Invoke();
+            // The only cluster of a topology is "the cluster" in its events; among several, each is named.
+            var several = topology.Clusters.Count > 1;
+            Clusters =
+            [
+                .. topology.Clusters.Select((info, index) => new ClusterMonitor(
+                    info,
+                    topology.Environments,
+                    cluster,
+                    time,
+                    Events,
+                    several ? info.Name ?? (index + 1).ToString(CultureInfo.InvariantCulture) : null)),
+            ];
+        }
+
+        foreach (var monitor in Clusters)
+        {
+            monitor.Changed += () => Changed?.Invoke();
+            foreach (var environment in Environments.Where(environment => monitor.Info.Hosts(environment.Name)))
+            {
+                _hosts.TryAdd(environment, monitor);
+            }
         }
     }
 
@@ -60,7 +81,23 @@ public sealed class DashboardMonitor
 
     public IEnumerable<TargetStatus> Targets => _targets.Select(entry => entry.Target);
 
-    public HealthSummary Summary => HealthSummary.Of(Targets.Select(target => target.State));
+    /// <summary>
+    /// The counts behind the header. An endpoint that does not answer while its environment's cluster is asleep is
+    /// counted as asleep, not as not healthy (<see cref="SleepOf"/>).
+    /// </summary>
+    public HealthSummary Summary
+    {
+        get
+        {
+            if (_hosts.Count == 0)
+            {
+                return HealthSummary.Of(Targets.Select(target => target.State));
+            }
+
+            var sleeps = Environments.ToDictionary(environment => environment, SleepOf);
+            return HealthSummary.OfNodes(_targets.Select(entry => (entry.Target.State, ClusterSleep.Covers(sleeps[entry.Environment], entry.Target.State))));
+        }
+    }
 
     /// <summary>In how many environments a node runs another version than the one pinned in Git.</summary>
     public VersionSummary VersionSummary => new(Environments.Count(environment => environment.VersionsDiffer));
@@ -78,10 +115,21 @@ public sealed class DashboardMonitor
     public DeliveryReport? Delivery { get; private set; }
 
     /// <summary>
-    /// The cluster the system runs in, read with every round of checks; null when the topology names none, and the
-    /// page then has no cluster view.
+    /// The clusters the system runs in, in the topology's order, each read with every round of checks; empty when the
+    /// topology names none, and the page then has no cluster view.
     /// </summary>
-    public ClusterMonitor? Cluster { get; }
+    public IReadOnlyList<ClusterMonitor> Clusters { get; } = [];
+
+    /// <summary>
+    /// The sleep of the cluster that hosts an environment, at the page's clock: not null while Azure's facts about
+    /// that cluster, read and not old, say it is stopped. Null for an environment no cluster of the topology names in
+    /// its <c>environments</c>, and whenever the facts prove nothing (<see cref="ClusterSleep.Of"/>).
+    /// </summary>
+    public ClusterSleep? SleepOf(EnvironmentStatus environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        return _hosts.TryGetValue(environment, out var host) ? host.Sleep : null;
+    }
 
     /// <summary>The environment the others are compared with: the first of the topology.</summary>
     public string? FirstEnvironment => Topology.Environments.Count > 0 ? Topology.Environments[0].Name : null;
@@ -91,7 +139,7 @@ public sealed class DashboardMonitor
     /// timeout delays neither the others nor their display. The pinned versions are read at the same time, once per
     /// environment, and once per deployable that has a pin of its own (<c>pinUrl</c>): a file that cannot be read is a
     /// result like any other and fails no check. So are the delivery facts, every <see cref="DeliveryInterval"/>, and
-    /// the two files of the cluster view, every round, where the topology names a cluster.
+    /// the two files of every cluster of the topology, every round.
     /// </summary>
     public async Task CheckAllAsync(ProbeKind probe, CancellationToken cancellationToken)
     {
@@ -104,7 +152,7 @@ public sealed class DashboardMonitor
             select ReadPinAsync(environment, deployable, cancellationToken);
         await Task.WhenAll(checks.Concat(readings).Concat(pins)
             .Append(ReadDeliveryAsync(cancellationToken))
-            .Append(Cluster?.CheckAsync(cancellationToken) ?? Task.CompletedTask));
+            .Concat(Clusters.Select(cluster => cluster.CheckAsync(cancellationToken))));
         var now = _time.GetUtcNow();
         foreach (var environment in Environments)
         {
@@ -112,8 +160,12 @@ public sealed class DashboardMonitor
             {
                 // The serving decision is compared once per round, when every node has its result: in the middle of a
                 // round it would mix this round's answers with the last one's.
+                // A deployable none of whose nodes answers while its cluster is asleep does not serve, and that is
+                // said as what it is: by now this round has read Azure's facts too.
                 var assessment = deployable.Assess();
-                if (EventDetector.Serving(deployable.LastServing, assessment, environment.Name, deployable.Info.Name, now) is { } change)
+                var sleep = SleepOf(environment);
+                var asleep = ClusterSleep.CoversAll(sleep, deployable.Nodes.Select(node => node.State)) ? sleep!.Headline : null;
+                if (EventDetector.Serving(deployable.LastServing, assessment, environment.Name, deployable.Info.Name, now, asleep) is { } change)
                 {
                     Events.Add(change);
                 }
@@ -206,6 +258,10 @@ public sealed class DashboardMonitor
         var before = NodeObservation.Of(target);
         target.Record(result with { Probe = probe });
         target.RecordTelemetry(await telemetry);
+
+        // An endpoint that stops answering while its cluster is known to be asleep is no problem. The facts are the
+        // ones the page has at this moment: in the round that first reads them, an answer may arrive before they do.
+        var sleep = SleepOf(environment);
         Events.AddRange(EventDetector.Node(
             // A check without telemetry (the app was down) is compared with the last reading that had some.
             before with { Telemetry = before.Telemetry ?? target.Samples.Reverse().Skip(1).FirstOrDefault(sample => sample is not null) },
@@ -214,7 +270,8 @@ public sealed class DashboardMonitor
             deployable.Name,
             target.Kind == TargetKind.FrontDoor ? "Front Door" : target.Region ?? target.Name,
             target.Kind == TargetKind.Node,
-            _time.GetUtcNow()));
+            _time.GetUtcNow(),
+            ClusterSleep.Covers(sleep, target.State) ? sleep!.Reason : null));
         Changed?.Invoke();
 
         // The build facts change only with a deployment: asked once, and again when the node reports another version.

@@ -1,9 +1,21 @@
-<article class="tile tile--@Target.State.ToString().ToLowerInvariant()" aria-labelledby="@HeadingId">
+@* An endpoint that does not answer while its cluster is known to be stopped is asleep (ClusterSleep): its tile says so
+   in the neutral colours, with a shape and a word of its own, and not as a failure. *@
+<article class="tile tile--@(IsAsleep ? "asleep" : Target.State.ToString().ToLowerInvariant())" aria-labelledby="@HeadingId">
     <header class="tile__header">
         <h4 id="@HeadingId">@Title</h4>
-        <DeepLink Href="StateLink" Title="@LinkText.For(LinkSet.LiveMetrics, Target.Name)" Class="deep--badge">
-            <StateBadge State="Target.State" />
-        </DeepLink>
+        @if (IsAsleep)
+        {
+            <span class="state state--asleep" title="@Sleep!.NodeDetail">
+                <AsleepIcon />
+                <span class="state__label">@ClusterSleep.Label</span>
+            </span>
+        }
+        else
+        {
+            <DeepLink Href="StateLink" Title="@LinkText.For(LinkSet.LiveMetrics, Target.Name)" Class="deep--badge">
+                <StateBadge State="Target.State" />
+            </DeepLink>
+        }
     </header>
 
     <p class="tile__chips">
@@ -158,7 +170,11 @@
         }
     }
 
-    @if (Target.Last?.Detail is { } detail)
+    @if (IsAsleep)
+    {
+        <p class="tile__detail">@Sleep!.NodeDetail</p>
+    }
+    else if (Target.Last?.Detail is { } detail)
     {
         <p class="tile__detail">@detail</p>
     }
@@ -185,6 +201,15 @@
     /// <summary>The deployable of the tile: its project and its build say where a node's version leads.</summary>
     [Parameter]
     public DeployableStatus? Deployable { get; set; }
+
+    /// <summary>
+    /// The sleep of the cluster that hosts the tile's environment; null when none is known to be stopped, and the
+    /// tile is then as its last check says.
+    /// </summary>
+    [Parameter]
+    public ClusterSleep? Sleep { get; set; }
+
+    private bool IsAsleep => ClusterSleep.Covers(Sleep, Target.State);
 
     private bool IsFrontDoor => Target.Kind == TargetKind.FrontDoor;
 

@@ -1,16 +1,24 @@
 namespace Dashboard.Health;
 
 /// <summary>The system the dashboard shows: the content of <c>topology.json</c>.</summary>
-/// <param name="Cluster">
-/// The Kubernetes cluster the system runs in, for the cluster view; null for a system without one, which is then shown
-/// without that view.
+/// <param name="Clusters">
+/// The Kubernetes clusters the system runs in, for the cluster view: the one of <c>cluster</c>, or those of
+/// <c>clusters</c> in the order of the file. Empty for a system without one, which is then shown without that view.
 /// </param>
-public sealed record Topology(SystemInfo System, DateTimeOffset? Generated, IReadOnlyList<EnvironmentInfo> Environments, ClusterInfo? Cluster = null)
+public sealed record Topology(SystemInfo System, DateTimeOffset? Generated, IReadOnlyList<EnvironmentInfo> Environments, IReadOnlyList<ClusterInfo> Clusters)
 {
     /// <summary>
     /// True when a deployable of any environment has a Front Door endpoint: the page's help then speaks of Front Door.
     /// </summary>
     public bool HasFrontDoor => Environments.Any(environment => environment.Deployables.Any(deployable => deployable.FrontDoor is not null));
+
+    /// <summary>
+    /// The cluster that hosts an environment: the one whose <c>environments</c> names it. Null for an environment no
+    /// cluster names, and a cluster without <c>environments</c> claims none: the health view then knows no cluster
+    /// behind the environment's nodes, and an unreachable node is a failure.
+    /// </summary>
+    public ClusterInfo? ClusterOf(string environment) =>
+        Clusters.FirstOrDefault(cluster => cluster.Hosts(environment));
 }
 
 /// <param name="Slug">The system's short name.</param>
@@ -41,8 +49,9 @@ public sealed record EnvironmentInfo(
     string? Namespace = null);
 
 /// <summary>
-/// The Kubernetes cluster of the system (<c>cluster</c> of <c>topology.json</c>): the two public files the cluster
-/// view reads, and where the cluster is in the Azure portal. Every part is optional.
+/// A Kubernetes cluster of the system (<c>cluster</c>, or an entry of <c>clusters</c>, of <c>topology.json</c>): the
+/// two public files the cluster view reads, where the cluster is in the Azure portal and which environments it hosts.
+/// Every part is optional.
 /// </summary>
 /// <param name="Name">The cluster's name; null when the topology does not say.</param>
 /// <param name="StatusUrl">
@@ -54,7 +63,31 @@ public sealed record EnvironmentInfo(
 /// publishes.
 /// </param>
 /// <param name="Links">Where the cluster is in the Azure portal (<see cref="LinkSet"/>); null without links.</param>
-public sealed record ClusterInfo(string? Name, Uri? StatusUrl = null, Uri? ServiceUrl = null, LinkSet? Links = null);
+/// <param name="Environments">
+/// The names of the environments the cluster hosts (<c>environments</c>); null when the topology does not say. With
+/// it, the cluster view lists the pods of these environments only, and the health view reads an environment as asleep
+/// while Azure reports its cluster stopped. Without it the cluster view groups the pods by every environment of the
+/// topology, and the health view knows no cluster behind an environment.
+/// </param>
+public sealed record ClusterInfo(string? Name, Uri? StatusUrl = null, Uri? ServiceUrl = null, LinkSet? Links = null, IReadOnlyList<string>? Environments = null)
+{
+    /// <summary>True when the cluster's <c>environments</c> names the environment, by its exact name.</summary>
+    public bool Hosts(string environment) => Environments is { } hosted && hosted.Contains(environment, StringComparer.Ordinal);
+
+    /// <summary>
+    /// A record compares a list by reference; two clusters are the same when they name the same environments in the
+    /// same order.
+    /// </summary>
+    public bool Equals(ClusterInfo? other) =>
+        other is not null
+        && Name == other.Name
+        && StatusUrl == other.StatusUrl
+        && ServiceUrl == other.ServiceUrl
+        && EqualityComparer<LinkSet?>.Default.Equals(Links, other.Links)
+        && (Environments is null ? other.Environments is null : other.Environments is not null && Environments.SequenceEqual(other.Environments, StringComparer.Ordinal));
+
+    public override int GetHashCode() => HashCode.Combine(Name, StatusUrl, ServiceUrl, Links, Environments?.Count);
+}
 
 /// <summary>
 /// One deployable of an environment: its public address (Front Door), the nodes behind it and the page of the project

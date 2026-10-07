@@ -1,9 +1,9 @@
 @* The pods of the cluster by namespace (ClusterGroups): first the namespaces of the topology's environments, in the
    topology's order and always open, then every other namespace by name as "Platform", behind a details element that
    is open when one of its pods is unhealthy. *@
-<section class="cluster-section" aria-labelledby="cluster-pods-title">
+<section class="cluster-section" aria-labelledby="@($"{IdPrefix}-pods-title")">
     <header class="cluster-section__header">
-        <h3 id="cluster-pods-title">Pods</h3>
+        <h3 id="@($"{IdPrefix}-pods-title")">Pods</h3>
         @if (Links?[LinkSet.Workloads] is { } workloads)
         {
             <p class="resource-links">
@@ -17,7 +17,7 @@
     }
     @foreach (var group in Groups.Environments)
     {
-        var id = $"cluster-env-{index++}";
+        var id = $"{IdPrefix}-env-{index++}";
         <section class="namespace" aria-labelledby="@id">
             <header class="namespace__header">
                 <h4 id="@id">@group.Environment!.Name <span class="namespace__name">· namespace <code>@group.Name</code></span></h4>
@@ -34,7 +34,7 @@
     {
         <details class="platform" open="@Groups.PlatformNeedsALook">
             <summary class="platform__summary">
-                <h4 id="cluster-platform">@ClusterText.PlatformSummary(Groups)</h4>
+                <h4 id="@($"{IdPrefix}-platform")">@ClusterText.PlatformSummary(Groups)</h4>
                 @if (Groups.PlatformNeedsALook)
                 {
                     var unhealthy = Groups.Platform.Sum(space => space.Unhealthy);
@@ -50,7 +50,7 @@
             }
             @foreach (var group in Groups.Platform)
             {
-                var id = $"cluster-platform-{platformIndex++}";
+                var id = $"{IdPrefix}-platform-{platformIndex++}";
                 <section class="namespace namespace--platform" aria-labelledby="@id">
                     <h5 class="namespace__platform-name" id="@id"><code>@group.Name</code></h5>
                     <PodTable Group="group" LabelledBy="@id" AsOf="AsOf" Zone="Zone" />
@@ -65,6 +65,13 @@
 </section>
 
 @code {
+    /// <summary>
+    /// The prefix of the element ids of this cluster's section, unique on the page: <c>cluster</c> for the only
+    /// cluster, <c>cluster-2</c> for the second of several.
+    /// </summary>
+    [Parameter]
+    public string IdPrefix { get; set; } = "cluster";
+
     [Parameter, EditorRequired]
     public ClusterGroups Groups { get; set; } = default!;
 

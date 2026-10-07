@@ -18,7 +18,14 @@
         <div class="page-header__status">
             @* Only the summary is announced: the tiles change on every check. *@
             <p class="summary summary--@Summary.Level.ToString().ToLowerInvariant()" role="status" aria-live="polite">
-                <StateIcon State="SummaryState" />
+                @if (Summary.Level == SummaryLevel.Asleep)
+                {
+                    <AsleepIcon />
+                }
+                else
+                {
+                    <StateIcon State="SummaryState" />
+                }
                 <span>@SummaryText</span>
             </p>
             @* The summary above stays about health; this line is there only while versions differ somewhere. *@
@@ -74,13 +81,13 @@
 
 @* Renderings of one monitor: the checks, the interval and the probe above apply to all. The address keeps the
    choice (#runtime, #runtime/<environment>, #cluster), so a link opens the view. The cluster view is there only for a
-   topology with a cluster. *@
+   topology with a cluster; it has one section per cluster. *@
 <nav class="views" aria-label="Views">
     <button type="button" class="views__tab" aria-current="@(View == DashboardView.Health ? "page" : null)"
             @onclick="() => ShowAsync(ViewAddress.Health)">Health</button>
     <button type="button" class="views__tab" aria-current="@(View == DashboardView.Runtime ? "page" : null)"
             @onclick="() => ShowAsync(new ViewAddress(DashboardView.Runtime, _address.Environment ?? _runtimeEnvironment))">Runtime</button>
-    @if (_monitor?.Cluster is not null)
+    @if (_monitor is { Clusters.Count: > 0 })
     {
         <button type="button" class="views__tab" aria-current="@(View == DashboardView.Cluster ? "page" : null)"
                 @onclick="() => ShowAsync(ViewAddress.Cluster)">Cluster</button>
@@ -93,9 +100,16 @@
         <RuntimeView Monitor="runtimeMonitor" Environment="@_address.Environment" EnvironmentChanged="OnRuntimeEnvironmentChangedAsync"
                      Page="PageAddress" Zone="Zone" Now="Time.GetUtcNow()" />
     }
-    else if (_monitor is { Cluster: { } cluster } clusterMonitor && View == DashboardView.Cluster)
+    else if (_monitor is { Clusters: { Count: > 0 } clusters } && View == DashboardView.Cluster)
     {
-        <ClusterView Cluster="cluster" Environments="clusterMonitor.Topology.Environments" Zone="Zone" Now="Time.GetUtcNow()" />
+        var clusterIndex = 0;
+        foreach (var cluster in clusters)
+        {
+            // The only cluster keeps the ids it always had; the words about the two sources stand once.
+            var first = clusterIndex++ == 0;
+            <ClusterView @key="cluster" Cluster="cluster" Zone="Zone" Now="Time.GetUtcNow()"
+                         IdPrefix="@(first ? "cluster" : $"cluster-{clusterIndex}")" ShowHelp="first" />
+        }
     }
     else if (_monitor is { } monitor)
     {
@@ -108,12 +122,19 @@
         foreach (var environment in monitor.Environments)
         {
             var environmentId = $"env-{environmentIndex++}";
+
+            // Not null while Azure's facts say the environment's cluster is stopped: what does not answer is asleep.
+            var sleep = monitor.SleepOf(environment);
             <section class="environment" aria-labelledby="@environmentId">
                 <header class="environment__header">
                     <h2 id="@environmentId">@environment.Name</h2>
                     @if (environment.Tier is { } tier)
                     {
                         <span class="chip">@tier</span>
+                    }
+                    @if (ClusterSleep.CoversAll(sleep, environment.Deployables.SelectMany(deployable => deployable.Targets).Select(target => target.State)))
+                    {
+                        <span class="chip chip--asleep" title="@sleep!.Detail(Time.GetUtcNow(), Zone)"><AsleepIcon />@ClusterSleep.Label.ToLowerInvariant()</span>
                     }
                     <EnvironmentLinks Links="environment.Info.Links" Environment="@environment.Name" />
                 </header>
@@ -126,7 +147,7 @@
                 }
                 @foreach (var deployable in environment.Deployables)
                 {
-                    <DeployableSection @key="deployable" Deployable="deployable" Environment="environment" Zone="Zone"
+                    <DeployableSection @key="deployable" Deployable="deployable" Environment="environment" Zone="Zone" Sleep="sleep"
                                        Monitor="monitor" Now="Time.GetUtcNow()" IdPrefix="@($"{environmentId}-app-{deployableIndex++}")" />
                 }
                 <EnvironmentDelivery Monitor="monitor" Environment="environment" IdPrefix="@environmentId" Zone="Zone" Now="Time.GetUtcNow()" />
@@ -222,7 +243,7 @@
     private TimeZoneInfo Zone => Time.LocalTimeZone;
 
     /// <summary>The view that is shown: the address's, but the health view where it names a cluster the topology does not have.</summary>
-    private DashboardView View => _address.View == DashboardView.Cluster && _monitor?.Cluster is null ? DashboardView.Health : _address.View;
+    private DashboardView View => _address.View == DashboardView.Cluster && _monitor is not { Clusters.Count: > 0 } ? DashboardView.Health : _address.View;
 
     private Uri PageAddress => new(Navigation.BaseUri);
 

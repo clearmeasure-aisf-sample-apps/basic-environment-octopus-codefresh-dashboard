@@ -5,9 +5,9 @@
     var assessment = ClusterAssessment.Service(Reading);
     var service = Reading.Value;
 }
-<section class="card cluster-card cluster-card--@assessment.State.ToString().ToLowerInvariant()" aria-labelledby="cluster-service-title">
+<section class="card cluster-card cluster-card--@assessment.State.ToString().ToLowerInvariant()" aria-labelledby="@($"{IdPrefix}-service-title")">
     <header class="cluster-card__header">
-        <h3 class="card__title" id="cluster-service-title">
+        <h3 class="card__title" id="@($"{IdPrefix}-service-title")">
             AKS service
             <span class="card__context">what Azure reports, published about every ten minutes</span>
         </h3>
@@ -111,8 +111,8 @@
         @* A number Azure does not emit for this cluster is a dash: it is no problem. *@
         @if (service.Metrics is { HasAny: true } metrics)
         {
-            <div class="cluster-card__block" role="group" aria-labelledby="cluster-service-metrics">
-                <h4 class="tile__label" id="cluster-service-metrics" title="Azure Monitor's numbers for the nodes and for the API server of the control plane; a dash where Azure reports none">Azure Monitor, @ClusterText.MetricsWindow(metrics)</h4>
+            <div class="cluster-card__block" role="group" aria-labelledby="@($"{IdPrefix}-service-metrics")">
+                <h4 class="tile__label" id="@($"{IdPrefix}-service-metrics")" title="Azure Monitor's numbers for the nodes and for the API server of the control plane; a dash where Azure reports none">Azure Monitor, @ClusterText.MetricsWindow(metrics)</h4>
                 <div class="uses uses--small">
                     <UseRow Name="Node CPU" Label="Node CPU, as Azure Monitor reports it" Value="@Percent(metrics.NodeCpuPercent)" Percent="metrics.NodeCpuPercent" ShowPercent="false" />
                     <UseRow Name="Node memory" Label="Node memory, as Azure Monitor reports it" Value="@Percent(metrics.NodeMemoryPercent)" Percent="metrics.NodeMemoryPercent" ShowPercent="false" />
@@ -145,6 +145,13 @@
 </section>
 
 @code {
+    /// <summary>
+    /// The prefix of the element ids of this cluster's section, unique on the page: <c>cluster</c> for the only
+    /// cluster, <c>cluster-2</c> for the second of several.
+    /// </summary>
+    [Parameter]
+    public string IdPrefix { get; set; } = "cluster";
+
     /// <summary>The last reading of Azure's facts.</summary>
     [Parameter, EditorRequired]
     public SourceReading<AksService> Reading { get; set; } = default!;

@@ -1,3 +1,5 @@
+using Dashboard.Cluster;
+
 namespace Dashboard.Health;
 
 public enum TargetKind
@@ -75,7 +77,8 @@ public sealed class TargetStatus(TargetKind kind, string name, Uri url, string? 
 
     public NodeHealth ToNodeHealth() => new(Name, Region, IsPrimary, State);
 
-    public NodeVersion ToNodeVersion() => new(Region ?? Name, State, Version);
+    /// <param name="sleep">The sleep of the cluster that hosts the node's environment; null when none is known to be stopped.</param>
+    public NodeVersion ToNodeVersion(ClusterSleep? sleep = null) => new(Region ?? Name, State, Version, ClusterSleep.Covers(sleep, State));
 }
 
 /// <summary>A deployable of an environment with the state of its endpoints.</summary>
@@ -205,10 +208,14 @@ public sealed class EnvironmentStatus
     /// topology names one (<c>pinUrl</c>), from the environment's <c>versions.json</c> otherwise; null when the
     /// topology names neither.
     /// </summary>
-    public VersionAssessment? AssessVersions(DeployableStatus deployable)
+    /// <param name="sleep">
+    /// The sleep of the cluster that hosts this environment (<see cref="DashboardMonitor.SleepOf"/>): a node that does
+    /// not answer is then named as asleep, not as unreachable. Null when no cluster is known to be stopped.
+    /// </param>
+    public VersionAssessment? AssessVersions(DeployableStatus deployable, ClusterSleep? sleep = null)
     {
         ArgumentNullException.ThrowIfNull(deployable);
-        var nodes = deployable.Nodes.Select(node => node.ToNodeVersion());
+        var nodes = deployable.Nodes.Select(node => node.ToNodeVersion(sleep));
         if (deployable.Pinned is { } own)
         {
             return VersionAssessment.Assess(own, deployable.Info.Name, nodes, deployable.Info.PinFile);

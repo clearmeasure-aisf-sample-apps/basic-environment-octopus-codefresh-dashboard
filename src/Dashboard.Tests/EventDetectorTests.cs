@@ -268,4 +268,50 @@ public class EventDetectorTests
 
         Assert.Equal("ui: pinned 2.4.14 → 2.4.15 in Git", Assert.Single(monitor.Events.Newest).Text);
     }
+
+    // ----- Asleep: an endpoint that stops answering while its cluster is known to be stopped -----
+
+    [Fact]
+    public void AnEndpointThatFallsAsleepIsForInformationAndSaysWhy()
+    {
+        const string Why = "cluster aks-platform-nonprod is stopped";
+        IReadOnlyList<DashboardEvent> Asleep(NodeObservation before, NodeObservation after) =>
+            EventDetector.Node(before, after, "uat", "ui", "westus3", true, Now, Why);
+
+        var slept = Assert.Single(Asleep(Seen(HealthState.Healthy), Seen(HealthState.Unreachable, detail: "No answer within 10 s.")));
+        var first = Assert.Single(Asleep(Seen(HealthState.Pending, null), Seen(HealthState.Unreachable, detail: "No answer within 10 s.")));
+
+        Assert.Equal(new DashboardEvent(Now, EventKind.Health, EventLevel.Info, "uat", "westus3", "ui: Healthy → Asleep: cluster aks-platform-nonprod is stopped"), slept);
+        Assert.Equal((EventLevel.Info, "ui: Asleep at the first check: cluster aks-platform-nonprod is stopped"), (first.Level, first.Text));
+    }
+
+    [Fact]
+    public void AnEndpointThatAnswersWhileItsClusterIsSaidToBeStoppedIsAsItAnswers()
+    {
+        var failing = Assert.Single(EventDetector.Node(Seen(HealthState.Healthy), Seen(HealthState.Unhealthy, status: 503), "uat", "ui", "westus3", true, Now, "the cluster is stopped"));
+        var woke = Assert.Single(EventDetector.Node(Seen(HealthState.Unreachable), Seen(HealthState.Healthy, status: 200), "uat", "ui", "westus3", true, Now, "the cluster is stopped"));
+
+        Assert.Equal((EventLevel.Warning, "ui: Healthy → Unhealthy (HTTP 503)"), (failing.Level, failing.Text));
+        Assert.Equal((EventLevel.Good, "ui: Unreachable → Healthy (HTTP 200)"), (woke.Level, woke.Text));
+    }
+
+    [Fact]
+    public void NothingServesBecauseTheDeployableIsAsleepIsForInformation()
+    {
+        const string Asleep = "Asleep: cluster aks-platform-nonprod is stopped";
+        var serves = ServingAssessment.Assess([new NodeHealth("workorders-tdd", "southcentralus", true, HealthState.Healthy)], null);
+        var silent = ServingAssessment.Assess([new NodeHealth("workorders-tdd", "southcentralus", true, HealthState.Unreachable)], null);
+
+        var slept = EventDetector.Serving(serves, silent, "tdd", "workorders", Now, Asleep)!;
+        var first = EventDetector.Serving(null, silent, "tdd", "workorders", Now, Asleep)!;
+        var failed = EventDetector.Serving(serves, silent, "tdd", "workorders", Now)!;
+        var woke = EventDetector.Serving(silent, serves, "tdd", "workorders", Now, Asleep)!;
+
+        Assert.Equal(
+            new DashboardEvent(Now, EventKind.Serving, EventLevel.Info, "tdd", "workorders", "Asleep: cluster aks-platform-nonprod is stopped; southcentralus no longer serves traffic."),
+            slept);
+        Assert.Equal((EventLevel.Info, "Asleep: cluster aks-platform-nonprod is stopped."), (first.Level, first.Text));
+        Assert.Equal(EventLevel.Problem, failed.Level);
+        Assert.Equal((EventLevel.Good, "southcentralus serves traffic again."), (woke.Level, woke.Text));
+    }
 }

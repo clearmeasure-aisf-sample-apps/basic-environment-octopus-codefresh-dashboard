@@ -423,6 +423,16 @@ main {
   stroke: var(--critical);
 }
 
+/* Asleep: none of the nodes answers because their cluster is stopped on purpose. The banner keeps the neutral ground
+   and ink of a state that is neither good nor bad; the crescent and the word say which. */
+.serving--asleep {
+  border-left-color: var(--pending);
+}
+
+.serving--asleep .serving__icon {
+  stroke: var(--pending);
+}
+
 /* ---------- Versions: pinned in Git next to what the nodes run ---------- */
 
 .versions {
@@ -538,6 +548,15 @@ main {
   border-top-color: var(--critical);
 }
 
+/* Asleep is no failure: the tile keeps the neutral edge, and the checks that got no answer are drawn in the same ink. */
+.tile--asleep {
+  border-top-color: var(--pending);
+}
+
+.tile--asleep .history__bar--unreachable {
+  fill: var(--pending);
+}
+
 .tile__header {
   display: flex;
   flex-wrap: wrap;
@@ -586,6 +605,12 @@ main {
 .chip--serving {
   border-color: var(--ink);
   color: var(--ink);
+}
+
+.chip--asleep {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .state {
@@ -653,6 +678,10 @@ main {
 .state-icon--pending .state-icon__mark {
   stroke: var(--pending);
   stroke-width: 2;
+}
+
+.state-icon--asleep {
+  fill: var(--pending);
 }
 
 .metrics {
@@ -1277,6 +1306,23 @@ main {
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
+}
+
+/* The cluster's name and, where the topology says so, the environments it hosts. */
+.cluster__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.9rem;
+}
+
+.cluster__hosts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.4rem;
+  color: var(--ink-secondary);
+  font-size: 0.9rem;
 }
 
 /* What Azure reports next to what the cluster reports: side by side where there is room, so they can be compared. */

@@ -119,6 +119,10 @@ public static class EventDetector
     /// </summary>
     /// <param name="node">The node's label: its region or name, or "Front Door".</param>
     /// <param name="isNode">False for a Front Door endpoint, which answers with the version of whichever node served.</param>
+    /// <param name="asleep">
+    /// Why an endpoint that does not answer is asleep and not failing (<c>cluster aks-platform-nonprod is
+    /// stopped</c>); null when no cluster is known to be stopped behind it. The event is then for information.
+    /// </param>
     public static IReadOnlyList<DashboardEvent> Node(
         NodeObservation before,
         NodeObservation after,
@@ -126,14 +130,22 @@ public static class EventDetector
         string deployable,
         string node,
         bool isNode,
-        DateTimeOffset at)
+        DateTimeOffset at,
+        string? asleep = null)
     {
         ArgumentNullException.ThrowIfNull(before);
         ArgumentNullException.ThrowIfNull(after);
         var events = new List<DashboardEvent>();
         if (after.State != before.State && after.State != HealthState.Pending && !(before.State == HealthState.Pending && after.State == HealthState.Healthy))
         {
-            events.Add(new DashboardEvent(at, EventKind.Health, LevelOf(after.State), environment, node, HealthWords(before, after, deployable)));
+            var sleeps = asleep is not null && after.State == HealthState.Unreachable;
+            events.Add(new DashboardEvent(
+                at,
+                EventKind.Health,
+                sleeps ? EventLevel.Info : LevelOf(after.State),
+                environment,
+                node,
+                HealthWords(before, after, deployable, sleeps ? asleep : null)));
         }
 
         if (!isNode)
@@ -180,7 +192,17 @@ public static class EventDetector
     /// The serving decision of a deployable changed: a failover, a failback, or nothing serves. Null when the node
     /// expected to serve is the same, and while the page has not decided yet.
     /// </summary>
-    public static DashboardEvent? Serving(ServingAssessment? before, ServingAssessment after, string environment, string deployable, DateTimeOffset at)
+    /// <param name="asleep">
+    /// What to say when nothing serves because the deployable is asleep (<c>Asleep: cluster aks-platform-nonprod is
+    /// stopped</c>); null when it is not. The event is then for information, not a problem.
+    /// </param>
+    public static DashboardEvent? Serving(
+        ServingAssessment? before,
+        ServingAssessment after,
+        string environment,
+        string deployable,
+        DateTimeOffset at,
+        string? asleep = null)
     {
         ArgumentNullException.ThrowIfNull(after);
         if (after.State is ServingState.Pending or ServingState.NoNodes)
@@ -206,6 +228,7 @@ public static class EventDetector
             ServingState.Primary when known && before!.State == ServingState.FailedOver => Event(EventLevel.Good, $"Failback: {from} → {to}. The primary is healthy again."),
             ServingState.Primary when known && before!.State == ServingState.Down => Event(EventLevel.Good, $"{to} serves traffic again."),
             ServingState.Primary when known => Event(EventLevel.Info, $"Serving region: {from} → {to}."),
+            ServingState.Down when asleep is not null => Event(EventLevel.Info, from is null ? $"{asleep}." : $"{asleep}; {from} no longer serves traffic."),
             ServingState.Down => Event(EventLevel.Problem, from is null ? "No healthy node: nothing can serve traffic." : $"No healthy node: {from} no longer serves, and nothing else can."),
             _ => null,
         };
@@ -245,11 +268,12 @@ public static class EventDetector
         _ => EventLevel.Problem,
     };
 
-    private static string HealthWords(NodeObservation before, NodeObservation after, string deployable)
+    private static string HealthWords(NodeObservation before, NodeObservation after, string deployable, string? asleep)
     {
-        var label = HealthClassifier.Label(after.State);
+        var label = asleep is null ? HealthClassifier.Label(after.State) : "Asleep";
         var facts = after.Last switch
         {
+            _ when asleep is not null => $": {asleep}",
             { StatusCode: { } status } => string.Create(CultureInfo.InvariantCulture, $" (HTTP {status})"),
             { Detail: { } detail } => $": {detail.TrimEnd('.')}",
             _ => string.Empty,

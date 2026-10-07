@@ -99,5 +99,22 @@
         }
       ]
     }
+  ],
+  "clusters": [
+    {
+      "name": "aks-platform-nonprod",
+      "environments": [
+        "tdd",
+        "uat"
+      ],
+      "serviceUrl": "https://raw.githubusercontent.com/clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh-dashboard/status/aks-platform-nonprod.json"
+    },
+    {
+      "name": "aks-platform-prod",
+      "environments": [
+        "prod"
+      ],
+      "serviceUrl": "https://raw.githubusercontent.com/clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh-dashboard/status/aks-platform-prod.json"
+    }
   ]
 }

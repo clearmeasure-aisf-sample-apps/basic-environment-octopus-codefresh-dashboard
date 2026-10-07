@@ -16,6 +16,16 @@ public static class ClusterEventDetector
     public const string ServicePlace = "AKS";
 
     /// <summary>
+    /// The place of an event of a cluster as a whole: <c>cluster</c> for the only cluster of a topology, <c>cluster
+    /// aks-platform-prod</c> where the topology has several and the event must say which.
+    /// </summary>
+    /// <param name="cluster">What the cluster is called among several; null for the only one.</param>
+    public static string ClusterPlaceOf(string? cluster) => cluster is null ? ClusterPlace : $"{ClusterPlace} {cluster}";
+
+    /// <summary>The place of an event of an AKS service, by the same rule: <c>AKS</c>, or <c>AKS aks-platform-prod</c>.</summary>
+    public static string ServicePlaceOf(string? cluster) => cluster is null ? ServicePlace : $"{ServicePlace} {cluster}";
+
+    /// <summary>
     /// How many pods a round names one by one: a node that fails takes every pod with it, and the log keeps fifty
     /// events. The others are counted in one more event.
     /// </summary>
@@ -26,14 +36,15 @@ public static class ClusterEventDetector
     /// again. Null when nothing changed, and at the first reading.
     /// </summary>
     /// <param name="detail">Why the file was not read, as the end of a sentence.</param>
-    public static DashboardEvent? Liveness(ClusterLiveness before, ClusterLiveness after, string? detail, DateTimeOffset at)
+    /// <param name="place">The event's place (<see cref="ClusterPlaceOf"/>).</param>
+    public static DashboardEvent? Liveness(ClusterLiveness before, ClusterLiveness after, string? detail, DateTimeOffset at, string place = ClusterPlace)
     {
         if (before == after || before == ClusterLiveness.Pending || after == ClusterLiveness.Pending)
         {
             return null;
         }
 
-        DashboardEvent Event(EventLevel level, string text) => new(at, EventKind.Cluster, level, null, ClusterPlace, text);
+        DashboardEvent Event(EventLevel level, string text) => new(at, EventKind.Cluster, level, null, place, text);
         var reason = string.IsNullOrWhiteSpace(detail) ? string.Empty : $": {detail.TrimEnd('.')}";
         return after switch
         {
@@ -50,12 +61,14 @@ public static class ClusterEventDetector
     /// or is ready again, and per pod one event at most: its restart count rose, or else it became unhealthy, or else
     /// it is ready again. A node or a pod the last status did not have is no event, unless the pod is unhealthy.
     /// </summary>
-    /// <param name="environments">The environments of the topology: a pod of an environment's namespace is an event of that environment.</param>
+    /// <param name="environments">The environments the cluster hosts: a pod of an environment's namespace is an event of that environment.</param>
+    /// <param name="place">The events' place (<see cref="ClusterPlaceOf"/>).</param>
     public static IReadOnlyList<DashboardEvent> Status(
         ClusterStatus before,
         ClusterStatus after,
         IEnumerable<EnvironmentInfo> environments,
-        DateTimeOffset at)
+        DateTimeOffset at,
+        string place = ClusterPlace)
     {
         ArgumentNullException.ThrowIfNull(before);
         ArgumentNullException.ThrowIfNull(after);
@@ -67,8 +80,8 @@ public static class ClusterEventDetector
             if (nodes.TryGetValue(node.Name, out var known) && known.Ready != node.Ready)
             {
                 events.Add(node.Ready
-                    ? new DashboardEvent(at, EventKind.Cluster, EventLevel.Good, null, ClusterPlace, $"Node {ClusterText.ShortNode(node.Name)} is ready again")
-                    : new DashboardEvent(at, EventKind.Cluster, EventLevel.Problem, null, ClusterPlace, $"Node {ClusterText.ShortNode(node.Name)} is not ready"));
+                    ? new DashboardEvent(at, EventKind.Cluster, EventLevel.Good, null, place, $"Node {ClusterText.ShortNode(node.Name)} is ready again")
+                    : new DashboardEvent(at, EventKind.Cluster, EventLevel.Problem, null, place, $"Node {ClusterText.ShortNode(node.Name)} is not ready"));
             }
         }
 
@@ -86,7 +99,7 @@ public static class ClusterEventDetector
             var known = pods.GetValueOrDefault((space.Name, pod.Name));
             if (Pod(known, known is null ? null : PodRules.StateOf(known, beforeAt), pod, PodRules.StateOf(pod, afterAt), space.Name, afterAt) is { } text)
             {
-                changes.Add(new DashboardEvent(at, EventKind.Cluster, text.Level, names.GetValueOrDefault(space.Name), ClusterPlace, text.Text));
+                changes.Add(new DashboardEvent(at, EventKind.Cluster, text.Level, names.GetValueOrDefault(space.Name), place, text.Text));
             }
         }
 
@@ -98,7 +111,7 @@ public static class ClusterEventDetector
                 EventKind.Cluster,
                 EventLevel.Info,
                 null,
-                ClusterPlace,
+                place,
                 string.Create(CultureInfo.InvariantCulture, $"{changes.Count - NamedPods} more pods changed in this check")));
         }
 
@@ -108,7 +121,8 @@ public static class ClusterEventDetector
     /// <summary>
     /// Azure's verdict on the AKS service or its power state changed between the last facts the page read and these.
     /// </summary>
-    public static IReadOnlyList<DashboardEvent> Service(AksService before, AksService after, DateTimeOffset at)
+    /// <param name="place">The events' place (<see cref="ServicePlaceOf"/>).</param>
+    public static IReadOnlyList<DashboardEvent> Service(AksService before, AksService after, DateTimeOffset at, string place = ServicePlace)
     {
         ArgumentNullException.ThrowIfNull(before);
         ArgumentNullException.ThrowIfNull(after);
@@ -122,7 +136,7 @@ public static class ClusterEventDetector
                 _ when AksService.Is(now, AksAvailability.Unavailable) => EventLevel.Problem,
                 _ => EventLevel.Info,
             };
-            events.Add(new DashboardEvent(at, EventKind.Cluster, level, null, ServicePlace, $"Azure's verdict on the AKS service: {verdict} → {now}"));
+            events.Add(new DashboardEvent(at, EventKind.Cluster, level, null, place, $"Azure's verdict on the AKS service: {verdict} → {now}"));
         }
 
         if (before.PowerState is { } power && after.PowerState is { } current && !AksService.Is(power, current))
@@ -132,7 +146,7 @@ public static class ClusterEventDetector
                 EventKind.Cluster,
                 AksService.Is(current, AksService.Running) ? EventLevel.Good : EventLevel.Info,
                 null,
-                ServicePlace,
+                place,
                 $"The power state of the AKS service: {power} → {current}"));
         }
 

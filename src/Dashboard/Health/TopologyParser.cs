@@ -55,10 +55,10 @@ public static class TopologyParser
             var system = ReadSystem(root, errors);
             var generated = ReadTime(root, "generated");
             var environments = ReadEnvironments(root, errors);
-            var cluster = ReadCluster(root, errors);
+            var clusters = ReadClusters(root, environments, errors);
             return errors.Count > 0
                 ? new TopologyParseResult(null, errors)
-                : new TopologyParseResult(new Topology(system, generated, environments, cluster), []);
+                : new TopologyParseResult(new Topology(system, generated, environments, clusters), []);
         }
     }
 
@@ -122,39 +122,137 @@ public static class TopologyParser
     }
 
     /// <summary>
-    /// The optional <c>cluster</c>: null when it is absent or <c>null</c>, and the page then has no cluster view. Its
-    /// addresses are held to the rule of every address the page calls or links to; so are the links it knows
-    /// (<see cref="LinkSet.Portal"/>, <see cref="LinkSet.Workloads"/>), and any other key of <c>links</c> is ignored.
+    /// The clusters of the system: the one of <c>cluster</c> (an object), or those of <c>clusters</c> (an array of the
+    /// same object), never both. None when both are absent or <c>null</c>, and the page then has no cluster view.
     /// </summary>
-    private static ClusterInfo? ReadCluster(JsonElement root, List<string> errors)
+    private static List<ClusterInfo> ReadClusters(JsonElement root, List<EnvironmentInfo> environments, List<string> errors)
     {
-        const string Path = "cluster";
-        if (!root.TryGetProperty(Path, out var cluster) || cluster.ValueKind == JsonValueKind.Null)
+        const string One = "cluster";
+        const string Several = "clusters";
+        var clusters = new List<ClusterInfo>();
+        var hasOne = root.TryGetProperty(One, out var single) && single.ValueKind != JsonValueKind.Null;
+        var hasSeveral = root.TryGetProperty(Several, out var array) && array.ValueKind != JsonValueKind.Null;
+        if (hasOne && hasSeveral)
         {
-            return null;
+            errors.Add($"{One} and {Several}: both are present; name the clusters in one of them.");
+            return clusters;
         }
 
+        // Which entry hosts an environment: a second claim on the same one is an error.
+        var hosts = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (hasOne)
+        {
+            if (ReadCluster(single, One, environments, hosts, errors) is { } cluster)
+            {
+                clusters.Add(cluster);
+            }
+        }
+        else if (hasSeveral)
+        {
+            if (array.ValueKind != JsonValueKind.Array)
+            {
+                errors.Add($"{Several}: not an array.");
+                return clusters;
+            }
+
+            var index = 0;
+            foreach (var element in array.EnumerateArray())
+            {
+                if (ReadCluster(element, $"{Several}[{index++}]", environments, hosts, errors) is { } cluster)
+                {
+                    clusters.Add(cluster);
+                }
+            }
+        }
+
+        return clusters;
+    }
+
+    /// <summary>
+    /// One cluster. Its addresses are held to the rule of every address the page calls or links to; so are the links
+    /// it knows (<see cref="LinkSet.Portal"/>, <see cref="LinkSet.Workloads"/>), and any other key of <c>links</c> is
+    /// ignored.
+    /// </summary>
+    private static ClusterInfo? ReadCluster(
+        JsonElement cluster,
+        string path,
+        List<EnvironmentInfo> environments,
+        Dictionary<string, string> hosts,
+        List<string> errors)
+    {
         if (cluster.ValueKind != JsonValueKind.Object)
         {
-            errors.Add($"{Path}: not an object.");
+            errors.Add($"{path}: not an object.");
             return null;
         }
 
-        var status = ReadOptionalAddress(cluster, "statusUrl", Path, errors);
-        var service = ReadOptionalAddress(cluster, "serviceUrl", Path, errors);
+        var status = ReadOptionalAddress(cluster, "statusUrl", path, errors);
+        var service = ReadOptionalAddress(cluster, "serviceUrl", path, errors);
         var found = new Dictionary<string, Uri>(StringComparer.Ordinal);
         if (cluster.TryGetProperty("links", out var links) && links.ValueKind == JsonValueKind.Object)
         {
             foreach (var key in new[] { LinkSet.Portal, LinkSet.Workloads })
             {
-                if (ReadOptionalAddress(links, key, $"{Path}.links", errors) is { } address)
+                if (ReadOptionalAddress(links, key, $"{path}.links", errors) is { } address)
                 {
                     found[key] = address;
                 }
             }
         }
 
-        return new ClusterInfo(ReadText(cluster, "name"), status, service, found.Count == 0 ? null : new LinkSet(found));
+        return new ClusterInfo(
+            ReadText(cluster, "name"),
+            status,
+            service,
+            found.Count == 0 ? null : new LinkSet(found),
+            ReadHostedEnvironments(cluster, path, environments, hosts, errors));
+    }
+
+    /// <summary>
+    /// The optional <c>environments</c> of a cluster: the names of the environments it hosts. Null when absent or
+    /// <c>null</c>. A name is a reference, so it is held to a rule: it must be the name of an environment of the
+    /// topology, and one environment has one cluster.
+    /// </summary>
+    private static List<string>? ReadHostedEnvironments(
+        JsonElement cluster,
+        string clusterPath,
+        List<EnvironmentInfo> environments,
+        Dictionary<string, string> hosts,
+        List<string> errors)
+    {
+        if (!TryReadOptionalArray(cluster, "environments", clusterPath, errors, out var array))
+        {
+            return null;
+        }
+
+        var names = new List<string>();
+        var index = 0;
+        foreach (var element in array.EnumerateArray())
+        {
+            var path = $"{clusterPath}.environments[{index++}]";
+            var name = element.ValueKind == JsonValueKind.String ? element.GetString()?.Trim() : null;
+            if (string.IsNullOrEmpty(name))
+            {
+                errors.Add($"{path}: not the name of an environment.");
+            }
+            else if (!environments.Exists(environment => string.Equals(environment.Name, name, StringComparison.Ordinal)))
+            {
+                errors.Add($"{path}: \"{name}\" is not an environment of the topology.");
+            }
+            else if (hosts.TryGetValue(name, out var other))
+            {
+                errors.Add(other == clusterPath
+                    ? $"{path}: \"{name}\" is named twice."
+                    : $"{path}: \"{name}\" is already hosted by {other}.");
+            }
+            else
+            {
+                hosts[name] = clusterPath;
+                names.Add(name);
+            }
+        }
+
+        return names;
     }
 
     private static List<DeployableInfo> ReadDeployables(JsonElement environment, string environmentPath, List<string> errors)

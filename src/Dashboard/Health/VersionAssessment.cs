@@ -4,7 +4,8 @@ namespace Dashboard.Health;
 /// <param name="Label">The region, or the node's name when the topology gives no region.</param>
 /// <param name="State">The node's last check.</param>
 /// <param name="Version">The version the node last reported.</param>
-public sealed record NodeVersion(string Label, HealthState State, string? Version)
+/// <param name="Asleep">True for a node that does not answer because its cluster is known to be stopped.</param>
+public sealed record NodeVersion(string Label, HealthState State, string? Version, bool Asleep = false)
 {
     /// <summary>
     /// The version the node runs now, without build metadata; null when that is not known. A node that did not answer
@@ -16,6 +17,7 @@ public sealed record NodeVersion(string Label, HealthState State, string? Versio
     public string UnknownReason => State switch
     {
         HealthState.Pending => "is being checked",
+        HealthState.Unreachable when Asleep => "is asleep",
         HealthState.Unreachable => "is unreachable",
         _ => "reports no version",
     };

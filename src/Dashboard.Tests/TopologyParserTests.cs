@@ -388,7 +388,7 @@ public class TopologyParserTests
     {
         var topology = Valid(ClusterTopology);
 
-        var cluster = topology.Cluster!;
+        var cluster = Assert.Single(topology.Clusters);
         Assert.Equal("aks-cmdemo3", cluster.Name);
         Assert.Equal("https://cmdemo3-cluster.20-225-155-175.sslip.io/cluster.json", cluster.StatusUrl?.AbsoluteUri);
         Assert.Equal("https://raw.githubusercontent.com/example-org/cmdemo3-system/cluster-status/aks.json", cluster.ServiceUrl?.AbsoluteUri);
@@ -407,7 +407,7 @@ public class TopologyParserTests
     {
         var topology = Valid(json);
 
-        Assert.Null(topology.Cluster);
+        Assert.Empty(topology.Clusters);
         Assert.Null(Assert.Single(topology.Environments).Namespace);
     }
 
@@ -416,7 +416,7 @@ public class TopologyParserTests
     {
         var topology = Valid(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "topology.sample.json")));
 
-        Assert.Null(topology.Cluster);
+        Assert.Empty(topology.Clusters);
         Assert.All(topology.Environments, environment => Assert.Null(environment.Namespace));
     }
 
@@ -427,7 +427,7 @@ public class TopologyParserTests
     [InlineData("""{ "environments": [], "cluster": { "links": { "portal": null } } }""")]
     public void EveryPartOfTheClusterIsOptional(string json)
     {
-        Assert.Equal(new ClusterInfo(null), Valid(json).Cluster);
+        Assert.Equal(new ClusterInfo(null), Assert.Single(Valid(json).Clusters));
     }
 
     [Theory]
@@ -448,5 +448,146 @@ public class TopologyParserTests
     public void AClusterThatIsNotAnObjectIsAnError()
     {
         Assert.Equal("cluster: not an object.", Assert.Single(Invalid("""{ "environments": [], "cluster": "aks-cmdemo3" }""")));
+    }
+
+    // ----- Several clusters: clusters, and the environments a cluster hosts -----
+
+    private const string TwoClusters = """
+        {
+          "environments": [ { "name": "tdd" }, { "name": "uat" }, { "name": "prod" } ],
+          "clusters": [
+            { "name": "aks-platform-nonprod", "environments": [ "tdd", " uat " ],
+              "serviceUrl": "https://raw.githubusercontent.com/example-org/dashboard/status/aks-platform-nonprod.json" },
+            { "name": "aks-platform-prod", "environments": [ "prod" ],
+              "serviceUrl": "https://raw.githubusercontent.com/example-org/dashboard/status/aks-platform-prod.json",
+              "statusUrl": "https://prod-cluster.example.net/cluster.json",
+              "links": { "portal": "https://portal.azure.com/#@tenant/resource/aks-prod/overview" } }
+          ]
+        }
+        """;
+
+    [Fact]
+    public void SeveralClustersAreReadInTheOrderOfTheFileEachWithTheEnvironmentsItHosts()
+    {
+        var topology = Valid(TwoClusters);
+
+        Assert.Equal(["aks-platform-nonprod", "aks-platform-prod"], topology.Clusters.Select(cluster => cluster.Name));
+        Assert.Equal(["tdd", "uat"], topology.Clusters[0].Environments);
+        Assert.Equal(["prod"], topology.Clusters[1].Environments);
+        Assert.Equal(
+            "https://raw.githubusercontent.com/example-org/dashboard/status/aks-platform-nonprod.json",
+            topology.Clusters[0].ServiceUrl?.AbsoluteUri);
+        Assert.Null(topology.Clusters[0].StatusUrl);
+        Assert.Null(topology.Clusters[0].Links);
+        Assert.Equal("https://prod-cluster.example.net/cluster.json", topology.Clusters[1].StatusUrl?.AbsoluteUri);
+        Assert.Equal("https://portal.azure.com/#@tenant/resource/aks-prod/overview", topology.Clusters[1].Links![LinkSet.Portal]?.AbsoluteUri);
+    }
+
+    [Fact]
+    public void AnEnvironmentsClusterIsTheOneThatNamesIt()
+    {
+        var topology = Valid(TwoClusters);
+
+        Assert.Same(topology.Clusters[0], topology.ClusterOf("tdd"));
+        Assert.Same(topology.Clusters[0], topology.ClusterOf("uat"));
+        Assert.Same(topology.Clusters[1], topology.ClusterOf("prod"));
+        Assert.Null(topology.ClusterOf("TDD"));
+        Assert.Null(topology.ClusterOf("elsewhere"));
+    }
+
+    [Fact]
+    public void TheSingleClusterMayNameItsEnvironmentsTooAndWithoutThemItClaimsNone()
+    {
+        var naming = Valid("""{ "environments": [ { "name": "tdd" }, { "name": "uat" } ], "cluster": { "name": "aks", "environments": [ "uat" ] } }""");
+        var silent = Valid(ClusterTopology);
+
+        Assert.Equal(["uat"], Assert.Single(naming.Clusters).Environments);
+        Assert.Null(naming.ClusterOf("tdd"));
+        Assert.Same(naming.Clusters[0], naming.ClusterOf("uat"));
+
+        // As before the field existed: the cluster view groups by every environment, the health view knows no cluster.
+        Assert.Null(Assert.Single(silent.Clusters).Environments);
+        Assert.All(silent.Environments, environment => Assert.Null(silent.ClusterOf(environment.Name)));
+    }
+
+    [Theory]
+    [InlineData("""{ "environments": [], "clusters": [] }""")]
+    [InlineData("""{ "environments": [], "clusters": null }""")]
+    [InlineData("""{ "environments": [], "cluster": null, "clusters": null }""")]
+    public void NoClusterInClustersIsNoCluster(string json) => Assert.Empty(Valid(json).Clusters);
+
+    [Theory]
+    [InlineData("""{ "environments": [], "cluster": null, "clusters": [ { "name": "a" } ] }""")]
+    [InlineData("""{ "environments": [], "cluster": { "name": "a" }, "clusters": null }""")]
+    public void OneOfTheTwoMayBeNullNextToTheOther(string json) =>
+        Assert.Equal(new ClusterInfo("a"), Assert.Single(Valid(json).Clusters));
+
+    [Theory]
+    [InlineData("""{ "environments": [], "clusters": [ {} ] }""")]
+    [InlineData("""{ "environments": [], "clusters": [ { "name": null, "statusUrl": null, "serviceUrl": null, "links": null, "environments": null } ] }""")]
+    public void EveryPartOfAClusterInClustersIsOptional(string json) =>
+        Assert.Equal(new ClusterInfo(null), Assert.Single(Valid(json).Clusters));
+
+    [Fact]
+    public void AClusterThatHostsNoEnvironmentSaysSoWhichIsNotTheSameAsNotSaying()
+    {
+        var cluster = Assert.Single(Valid("""{ "environments": [ { "name": "tdd" } ], "clusters": [ { "environments": [] } ] }""").Clusters);
+
+        Assert.Empty(cluster.Environments!);
+        Assert.False(cluster.Hosts("tdd"));
+        Assert.NotEqual(new ClusterInfo(null), cluster);
+        Assert.Equal(new ClusterInfo(null, Environments: []), cluster);
+    }
+
+    [Fact]
+    public void ClusterAndClustersTogetherAreAnError()
+    {
+        var errors = Invalid("""{ "environments": [], "cluster": { "name": "a" }, "clusters": [ { "name": "b" } ] }""");
+
+        Assert.Equal("cluster and clusters: both are present; name the clusters in one of them.", Assert.Single(errors));
+    }
+
+    [Theory]
+    [InlineData("\"clusters\": {}", "clusters: not an array.")]
+    [InlineData("\"clusters\": \"aks\"", "clusters: not an array.")]
+    [InlineData("\"clusters\": [ \"aks\" ]", "clusters[0]: not an object.")]
+    [InlineData("\"clusters\": [ {}, 5 ]", "clusters[1]: not an object.")]
+    [InlineData("\"clusters\": [ {}, { \"serviceUrl\": \"aks.json\" } ]", "clusters[1].serviceUrl: not an absolute http or https address.")]
+    [InlineData("\"clusters\": [ { \"statusUrl\": 7 } ]", "clusters[0].statusUrl: not an absolute http or https address.")]
+    [InlineData("\"clusters\": [ { \"links\": { \"portal\": \"portal.azure.com\" } } ]", "clusters[0].links.portal: not an absolute http or https address.")]
+    [InlineData("\"clusters\": [ { \"environments\": \"tdd\" } ]", "clusters[0].environments: not an array.")]
+    [InlineData("\"clusters\": [ { \"environments\": [ 5 ] } ]", "clusters[0].environments[0]: not the name of an environment.")]
+    [InlineData("\"clusters\": [ { \"environments\": [ \"tdd\", \" \" ] } ]", "clusters[0].environments[1]: not the name of an environment.")]
+    [InlineData("\"clusters\": [ { \"environments\": [ \"tdd\", \"uta\" ] } ]", "clusters[0].environments[1]: \"uta\" is not an environment of the topology.")]
+    [InlineData("\"clusters\": [ { \"environments\": [ \"TDD\" ] } ]", "clusters[0].environments[0]: \"TDD\" is not an environment of the topology.")]
+    [InlineData("\"clusters\": [ { \"environments\": [ \"tdd\", \"tdd\" ] } ]", "clusters[0].environments[1]: \"tdd\" is named twice.")]
+    [InlineData("\"clusters\": [ { \"environments\": [ \"tdd\" ] }, { \"environments\": [ \"uat\", \"tdd\" ] } ]", "clusters[1].environments[1]: \"tdd\" is already hosted by clusters[0].")]
+    [InlineData("\"cluster\": { \"environments\": [ \"prod\" ] }", "cluster.environments[0]: \"prod\" is not an environment of the topology.")]
+    public void AClusterOfSeveralThatBreaksARuleIsAnErrorWithItsPlace(string field, string error)
+    {
+        var errors = Invalid($$"""{ "environments": [ { "name": "tdd" }, { "name": "uat" } ], {{field}} }""");
+
+        Assert.Equal(error, Assert.Single(errors));
+    }
+
+    [Fact]
+    public void TheTopologyThisRepositoryDeploysNamesItsTwoClustersWithTheirEnvironments()
+    {
+        var topology = Valid(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "topology.deploy.json")));
+
+        Assert.Equal(["tdd", "uat", "prod"], topology.Environments.Select(environment => environment.Name));
+        Assert.Equal(["aks-platform-nonprod", "aks-platform-prod"], topology.Clusters.Select(cluster => cluster.Name));
+        Assert.Equal(["aks-platform-nonprod", "aks-platform-nonprod", "aks-platform-prod"], topology.Environments.Select(environment => topology.ClusterOf(environment.Name)?.Name));
+        Assert.Equal(
+            [
+                "https://raw.githubusercontent.com/clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh-dashboard/status/aks-platform-nonprod.json",
+                "https://raw.githubusercontent.com/clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh-dashboard/status/aks-platform-prod.json",
+            ],
+            topology.Clusters.Select(cluster => cluster.ServiceUrl?.AbsoluteUri));
+        Assert.All(topology.Clusters, cluster =>
+        {
+            Assert.Null(cluster.StatusUrl);
+            Assert.Null(cluster.Links);
+        });
     }
 }

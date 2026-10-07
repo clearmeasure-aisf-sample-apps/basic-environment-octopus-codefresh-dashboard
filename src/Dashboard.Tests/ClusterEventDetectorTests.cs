@@ -177,4 +177,38 @@ public class ClusterEventDetectorTests
         Assert.Empty(ClusterEventDetector.Service(available, available with { Availability = null, PowerState = null }, Now));
         Assert.Empty(ClusterEventDetector.Service(available with { Availability = null, PowerState = null }, available, Now));
     }
+
+    // ----- Several clusters: an event says which -----
+
+    [Fact]
+    public void TheOnlyClusterIsTheClusterAndOneOfSeveralIsNamed()
+    {
+        Assert.Equal("cluster", ClusterEventDetector.ClusterPlaceOf(null));
+        Assert.Equal("AKS", ClusterEventDetector.ServicePlaceOf(null));
+        Assert.Equal("cluster aks-platform-prod", ClusterEventDetector.ClusterPlaceOf("aks-platform-prod"));
+        Assert.Equal("AKS aks-platform-prod", ClusterEventDetector.ServicePlaceOf("aks-platform-prod"));
+    }
+
+    [Fact]
+    public void TheEventsOfOneOfSeveralClustersCarryItsPlace()
+    {
+        var running = ClusterFixture.SampleService;
+        var place = ClusterEventDetector.ServicePlaceOf("aks-platform-prod");
+        var cluster = ClusterEventDetector.ClusterPlaceOf("aks-platform-prod");
+
+        var power = Assert.Single(ClusterEventDetector.Service(running, running with { PowerState = "Stopped" }, Now, place));
+        var silent = ClusterEventDetector.Liveness(ClusterLiveness.Live, ClusterLiveness.Silent, null, Now, cluster);
+        var node = Assert.Single(ClusterEventDetector.Status(
+            ClusterFixture.Status([ClusterFixture.Node()]),
+            ClusterFixture.Status([ClusterFixture.Node(ready: false)]),
+            Environments,
+            Now,
+            cluster));
+        var pod = Assert.Single(ClusterEventDetector.Status(With(ClusterFixture.Pod("ui", restarts: 1)), With(ClusterFixture.Pod("ui", restarts: 2)), Environments, Now, cluster));
+
+        Assert.Equal(Event(EventLevel.Info, null, "The power state of the AKS service: Running → Stopped", "AKS aks-platform-prod"), power);
+        Assert.Equal(Event(EventLevel.Problem, null, "The cluster's status file stopped answering", "cluster aks-platform-prod"), silent);
+        Assert.Equal("cluster aks-platform-prod", node.Node);
+        Assert.Equal(("tdd", "cluster aks-platform-prod"), (pod.Environment, pod.Node));
+    }
 }

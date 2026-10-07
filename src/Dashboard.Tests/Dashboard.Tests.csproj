@@ -26,6 +26,8 @@
   <!-- The samples the app ships with: tests read them, so the samples always match the contract. -->
   <ItemGroup>
     <None Include="..\Dashboard\wwwroot\topology.json" Link="topology.sample.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The topology this repository deploys: a test reads it, so a change that breaks it fails the build. -->
+    <None Include="..\..\deploy\topology.json" Link="topology.deploy.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Dashboard\wwwroot\runtime\*.json;..\Dashboard\wwwroot\runtime\*.svg" Link="runtime.sample\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
