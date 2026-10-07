@@ -1184,12 +1184,16 @@ main {
 .rt-node[data-rt-state="unreachable"] > .rt-box { fill: #5f5f5f !important; stroke: #111111 !important; stroke-width: 4px !important; stroke-dasharray: 2 4 !important; }
 .rt-node[data-rt-state="checking"] > .rt-box { fill: #607d8b !important; stroke: #37474f !important; stroke-width: 2px !important; stroke-dasharray: 6 4 !important; }
 .rt-node[data-rt-state="neutral"] > .rt-box { fill: #455a64 !important; stroke: #263238 !important; stroke-width: 1px !important; stroke-dasharray: none !important; }
+/* Asleep: its cluster is stopped on purpose. A calm slate with a long dash: neither the red of a failure nor the black
+   dots of a node that should have answered. */
+.rt-node[data-rt-state="asleep"] > .rt-box { fill: #56657a !important; stroke: #2f3a4a !important; stroke-width: 2px !important; stroke-dasharray: 10 4 !important; }
 .rt-node[data-rt-state] > .rt-box-line { stroke: rgba(255, 255, 255, 0.6) !important; }
 
 .rt-region[data-rt-state="serving"] > .rt-frame { fill: #eef7e6 !important; stroke: #2e7d32 !important; stroke-width: 2.5px !important; stroke-dasharray: none !important; }
 .rt-region[data-rt-state="standby"] > .rt-frame { fill: #f7f8f9 !important; stroke: #78909c !important; stroke-width: 1.5px !important; stroke-dasharray: 7 5 !important; }
 .rt-region[data-rt-state="down"] > .rt-frame { fill: #fdecec !important; stroke: #b71c1c !important; stroke-width: 2.5px !important; stroke-dasharray: 9 5 !important; }
 .rt-region[data-rt-state="checking"] > .rt-frame { fill: #fafafa !important; stroke: #90a4ae !important; stroke-dasharray: 3 4 !important; }
+.rt-region[data-rt-state="asleep"] > .rt-frame { fill: #f3f5f8 !important; stroke: #56657a !important; stroke-width: 2px !important; stroke-dasharray: 10 4 !important; }
 
 .rt-edge[data-rt-state="active"] > .rt-edge-line { stroke: #2e7d32 !important; stroke-width: 3.5px !important; stroke-dasharray: none !important; }
 .rt-edge[data-rt-state="active"] > .rt-edge-head { fill: #2e7d32 !important; stroke: #2e7d32 !important; }
@@ -1198,6 +1202,9 @@ main {
 .rt-edge[data-rt-state="down"] > .rt-edge-line { stroke: #b71c1c !important; stroke-width: 2.5px !important; stroke-dasharray: 9 5 !important; }
 .rt-edge[data-rt-state="down"] > .rt-edge-head { fill: #b71c1c !important; stroke: #b71c1c !important; }
 .rt-edge[data-rt-state="checking"] > .rt-edge-line { stroke: #78909c !important; stroke-dasharray: 3 4 !important; }
+/* Into a stopped cluster: no traffic is expected, as on an idle line. */
+.rt-edge[data-rt-state="asleep"] > .rt-edge-line { stroke: #90a4ae !important; stroke-width: 1.5px !important; stroke-dasharray: 2 5 !important; }
+.rt-edge[data-rt-state="asleep"] > .rt-edge-head { fill: #90a4ae !important; stroke: #90a4ae !important; }
 
 /* Tiles: drawn on the node's box, white on its colour. */
 .rt-tile text { fill: #ffffff; }
@@ -1207,10 +1214,12 @@ main {
 .rt-tile--unhealthy .rt-badge__text { fill: #b71c1c; }
 .rt-tile--unreachable .rt-badge__text { fill: #111111; }
 .rt-tile--checking .rt-badge__text,
+.rt-tile--asleep .rt-badge__text,
 .rt-tile--neutral .rt-badge__text { fill: #37474f; }
 .rt-tile--healthy .rt-badge__icon .rt-icon__fill { fill: #2e7d32; }
 .rt-tile--unhealthy .rt-badge__icon .rt-icon__fill { fill: #b71c1c; }
 .rt-tile--unreachable .rt-badge__icon .rt-icon__fill { fill: #111111; }
+.rt-tile--asleep .rt-badge__icon .rt-icon__fill { fill: #37474f; }
 .rt-line--strong .rt-row__text { font-weight: 700; }
 .rt-tile .rt-line--muted .rt-row__text { fill: rgba(255, 255, 255, 0.82); }
 .rt-line--serving .rt-row__text,
@@ -1260,6 +1269,7 @@ main {
 .rt-mark--standby .rt-icon__line,
 .rt-mark--checking .rt-icon__ring,
 .rt-mark--checking .rt-icon__line { stroke: #37474f; }
+.rt-mark--asleep .rt-icon__fill { fill: #37474f; }
 .rt-mark--neutral .rt-mark__text { fill: #607d8b; font-weight: 400; font-style: italic; }
 
 /* Links in the diagram: real <a> elements. Underlined, because the text keeps the colour of its place; the focus ring

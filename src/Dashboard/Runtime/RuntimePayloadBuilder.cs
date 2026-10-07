@@ -1,4 +1,5 @@
 using System.Globalization;
+using Dashboard.Cluster;
 using Dashboard.Health;
 
 namespace Dashboard.Runtime;
@@ -12,6 +13,17 @@ namespace Dashboard.Runtime;
 /// relationships are the web apps' own counts of the last minute (<see cref="TelemetrySnapshot"/>); a dash where a web
 /// app reports none. A web app's tile also shows its process's vitals and, next to the numbers, their trend over the
 /// last checks; where the topology has a link for a number or a name, the payload carries it.
+/// <para>
+/// A gateway inside a cluster (the public address of the web apps it routes to) is not checked on its own either: it
+/// is drawn reachable when the check of a web app passes through it. A workload without an address a browser can call
+/// is drawn, not probed.
+/// </para>
+/// <para>
+/// Asleep, by the health view's decision (<see cref="ClusterSleep"/>): while Azure's facts say the environment's cluster
+/// is stopped, a checked node that does not answer is asleep, not unreachable; and while none of the environment's
+/// endpoints answers, so is everything the diagram draws inside the cluster's frame (the frame itself, the namespace,
+/// the database, the gateway, the workloads) and every relationship into it.
+/// </para>
 /// </summary>
 public static class RuntimePayloadBuilder
 {
@@ -21,21 +33,44 @@ public static class RuntimePayloadBuilder
     public const string Checking = "checking";
     public const string Neutral = "neutral";
 
+    /// <summary>A node, frame or relationship of a cluster that is stopped on purpose: calm, not a failure.</summary>
+    public const string Asleep = "asleep";
+
     /// <summary>The number line's placeholder where no web app reports its calls.</summary>
     public const string NoNumber = "–";
     public const string CallsUnit = "calls/min";
 
-    private sealed record Entry(DeployableStatus Deployable, TargetStatus Target, ServingAssessment Assessment, TargetStatus? Expected);
+    /// <summary>The sleep of the environment's cluster, with what Azure reports in whole sentences (<see cref="ClusterSleep.Detail"/>).</summary>
+    private sealed record Sleeping(ClusterSleep Sleep, string Detail);
+
+    /// <param name="Sleeping">Not null for an endpoint that is asleep: its cluster is stopped and it did not answer.</param>
+    /// <param name="Label">The name the diagram gives the node, where that says more than its region; null otherwise.</param>
+    private sealed record Entry(DeployableStatus Deployable, TargetStatus Target, ServingAssessment Assessment, TargetStatus? Expected, Sleeping? Sleeping = null, string? Label = null);
+
+    /// <summary>The update where no cluster is known to be stopped: nothing is asleep.</summary>
+    public static RuntimePayload Build(RuntimeManifest manifest, EnvironmentStatus? environment, Uri? page, TimeZoneInfo zone) =>
+        Build(manifest, environment, page, zone, null, default);
 
     /// <param name="manifest">The environment's manifest.</param>
     /// <param name="environment">The monitor's environment of the same name; null when the topology has none.</param>
     /// <param name="page">The dashboard's own address: the static site that serves it is "this page".</param>
     /// <param name="zone">The viewer's time zone, for the tooltips.</param>
-    public static RuntimePayload Build(RuntimeManifest manifest, EnvironmentStatus? environment, Uri? page, TimeZoneInfo zone)
+    /// <param name="sleep">
+    /// The sleep of the cluster that hosts the environment (<see cref="DashboardMonitor.SleepOf"/>): the same decision
+    /// as the health view's. Null when no cluster is known to be stopped: what does not answer is then a failure.
+    /// </param>
+    /// <param name="now">The page's clock, for "5 min ago" in the tooltips of what is asleep.</param>
+    public static RuntimePayload Build(RuntimeManifest manifest, EnvironmentStatus? environment, Uri? page, TimeZoneInfo zone, ClusterSleep? sleep, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(manifest);
         ArgumentNullException.ThrowIfNull(zone);
-        var entries = Index(environment);
+        var sleeping = sleep is null ? null : new Sleeping(sleep, sleep.Detail(now, zone));
+        var entries = Index(environment, sleeping);
+
+        // The environment is asleep as a whole when none of its endpoints answers (the health view's "asleep" chip):
+        // then what the page cannot ask, and the diagram draws inside the cluster's frame, is asleep too.
+        var whole = ClusterSleep.CoversAll(sleep, entries.Select(entry => entry.Target.State)) ? sleeping : null;
+        Sleeping? Stopped(string? qualifiedName) => whole is not null && manifest.ClusterOf(qualifiedName) is not null ? whole : null;
         var byAlias = new Dictionary<string, Entry>(StringComparer.Ordinal);
         foreach (var node in manifest.Nodes)
         {
@@ -47,15 +82,26 @@ public static class RuntimePayloadBuilder
 
         var tiles = manifest.Nodes
             .Where(node => node.Kind != RuntimeNodeKind.Person)
-            .Select(node => node.Kind == RuntimeNodeKind.Sql
-                ? DatabaseTile(node, Clients(manifest, node, byAlias), zone, environment?.Info.Links)
-                : Tile(node, byAlias.GetValueOrDefault(node.Alias), environment, page, zone))
+            .Select(node => node.Kind switch
+            {
+                RuntimeNodeKind.Sql or RuntimeNodeKind.Gateway or RuntimeNodeKind.Workload when Stopped(node.QualifiedName) is { } stopped => AsleepTile(node, stopped),
+                RuntimeNodeKind.Sql => DatabaseTile(node, Clients(manifest, node, byAlias), zone, environment?.Info.Links),
+                RuntimeNodeKind.Gateway => GatewayTile(node, Routed(manifest, node.Alias, byAlias), manifest, zone),
+                RuntimeNodeKind.Workload => NeutralTile(
+                    node,
+                    "Not probed",
+                    "no address a browser can call",
+                    $"{node.Name}: it runs inside the cluster and has no public address, so this page cannot check it."),
+                _ => Tile(node, byAlias.GetValueOrDefault(node.Alias), environment, page, zone, sleep),
+            })
             .ToList();
         var reachable = manifest.Nodes
             .Where(node => node.Kind == RuntimeNodeKind.Sql && tiles.Any(tile => tile.Alias == node.Alias && tile.State == Healthy))
             .Select(node => node.RegionAlias)
             .ToHashSet(StringComparer.Ordinal);
-        var regions = manifest.Regions.Select(region => Region(region, manifest, byAlias, reachable.Contains(region.Alias))).ToList();
+        var regions = manifest.Regions
+            .Select(region => region.IsCluster ? ClusterMark(region, whole) : Region(region, manifest, byAlias, reachable.Contains(region.Alias)))
+            .ToList();
         var edges = manifest.Edges.Select(edge => Edge(edge, manifest, byAlias)).ToList();
         return new RuntimePayload(tiles, regions, edges);
     }
@@ -69,7 +115,7 @@ public static class RuntimePayloadBuilder
         _ => Checking,
     };
 
-    private static List<Entry> Index(EnvironmentStatus? environment)
+    private static List<Entry> Index(EnvironmentStatus? environment, Sleeping? sleeping)
     {
         var entries = new List<Entry>();
         if (environment is null)
@@ -80,7 +126,8 @@ public static class RuntimePayloadBuilder
         foreach (var deployable in environment.Deployables)
         {
             var assessment = deployable.Assess(out var expected);
-            entries.AddRange(deployable.Targets.Select(target => new Entry(deployable, target, assessment, expected)));
+            entries.AddRange(deployable.Targets.Select(target =>
+                new Entry(deployable, target, assessment, expected, ClusterSleep.Covers(sleeping?.Sleep, target.State) ? sleeping : null)));
         }
 
         return entries;
@@ -99,11 +146,11 @@ public static class RuntimePayloadBuilder
             : entries.FirstOrDefault(entry => entry.Target.Kind == kind && entry.Target.Url == node.Url);
     }
 
-    private static RuntimeTile Tile(RuntimeNode node, Entry? entry, EnvironmentStatus? environment, Uri? page, TimeZoneInfo zone)
+    private static RuntimeTile Tile(RuntimeNode node, Entry? entry, EnvironmentStatus? environment, Uri? page, TimeZoneInfo zone, ClusterSleep? sleep)
     {
         if (entry is not null)
         {
-            return node.Kind == RuntimeNodeKind.FrontDoor ? FrontDoorTile(node, entry, zone) : WebAppTile(node, entry, environment!, zone);
+            return node.Kind == RuntimeNodeKind.FrontDoor ? FrontDoorTile(node, entry, zone) : WebAppTile(node, entry, environment!, zone, sleep);
         }
 
         return node.Kind switch
@@ -132,12 +179,16 @@ public static class RuntimePayloadBuilder
         };
     }
 
-    /// <summary>The checked web apps with a relationship to the database.</summary>
+    /// <summary>
+    /// The checked web apps with a relationship to the database. Each is named by its region, as on its tile; the only
+    /// node of a deployable has no region to tell it apart, and is named as the diagram names it.
+    /// </summary>
     private static List<Entry> Clients(RuntimeManifest manifest, RuntimeNode database, Dictionary<string, Entry> byAlias) =>
         [.. manifest.Edges
-            .Where(edge => edge.Kind == RuntimeEdgeKind.Sql && edge.To == database.Alias)
-            .Select(edge => byAlias.GetValueOrDefault(edge.From))
-            .OfType<Entry>()];
+            .Where(edge => edge.Kind == RuntimeEdgeKind.Sql && edge.To == database.Alias && byAlias.ContainsKey(edge.From))
+            .Select(edge => byAlias[edge.From] is { Assessment.OnlyNode: not null } only
+                ? only with { Label = manifest.Nodes.FirstOrDefault(node => node.Alias == edge.From)?.Name }
+                : byAlias[edge.From])];
 
     /// <summary>
     /// The database from the web apps' health checks, which connect to it: one that passes says the database answered.
@@ -158,13 +209,13 @@ public static class RuntimePayloadBuilder
                 $"{node.Name}: the database takes no call from a browser, and this page checks no web app that uses it.");
         }
 
-        var passed = clients.Where(entry => entry.Target.Last is { State: HealthState.Healthy, Probe: ProbeKind.Health }).ToList();
+        var passed = clients.Where(entry => entry.Target.Last is { State: HealthState.Healthy } && RanHealthCheck(entry)).ToList();
         if (passed.Count > 0)
         {
             var names = string.Join(", ", passed.Select(entry => entry.Target.Name));
             var latest = passed.Max(entry => entry.Target.Last!.CheckedAt);
             var line = passed.Count == 1
-                ? $"health check of {passed[0].Target.Region ?? passed[0].Target.Name} passed"
+                ? $"health check of {passed[0].Label ?? passed[0].Target.Region ?? passed[0].Target.Name} passed"
                 : $"health checks of {passed.Count} web apps passed";
             var queries = clients.Select(entry => entry.Target.Telemetry).OfType<TelemetrySnapshot>().ToList();
 
@@ -183,7 +234,7 @@ public static class RuntimePayloadBuilder
                 $"{node.Name}: reachable. The database takes no call from a browser; the health check of {names} connected to it (last {TimeText.Clock(latest, zone)}).{background}");
         }
 
-        if (clients.All(entry => entry.Target.Last is { Probe: ProbeKind.Liveness }))
+        if (clients.All(entry => entry.Target.Last is { Probe: ProbeKind.Liveness } && !RanHealthCheck(entry)))
         {
             return NeutralTile(
                 node,
@@ -204,14 +255,87 @@ public static class RuntimePayloadBuilder
             $"{node.Name}: no web app that uses it passes its health check, so this page cannot tell whether it answers: the database or the web app may be the cause.");
     }
 
+    /// <summary>
+    /// True when the last check of a web app called its health check: the probe is Health check, or the topology gives
+    /// the liveness probe the same path (a system whose only public probe is the health check).
+    /// </summary>
+    private static bool RanHealthCheck(Entry entry) =>
+        entry.Target.Last is { } last
+        && (last.Probe == ProbeKind.Health || string.Equals(entry.Deployable.Info.PathFor(last.Probe), entry.Deployable.Info.HealthPath, StringComparison.Ordinal));
+
     private static RuntimeTile NeutralTile(RuntimeNode node, string label, string line, string title) =>
         new(node.Alias, Neutral, label, null, line.Length > 0 ? [new RuntimeTileLine(line, "muted")] : [], null, title);
 
-    private static RuntimeTile WebAppTile(RuntimeNode node, Entry entry, EnvironmentStatus environment, TimeZoneInfo zone)
+    /// <summary>
+    /// What the page cannot ask and the diagram draws inside the frame of a stopped cluster, while none of the
+    /// environment's endpoints answers: asleep with the cluster, in the health view's words.
+    /// </summary>
+    private static RuntimeTile AsleepTile(RuntimeNode node, Sleeping stopped) =>
+        new(
+            node.Alias,
+            Asleep,
+            ClusterSleep.Label,
+            null,
+            [new RuntimeTileLine(stopped.Sleep.Reason, "muted")],
+            null,
+            $"{node.Name}: {ClusterSleep.Label}. It runs inside the cluster, and {stopped.Sleep.Reason}.\n{stopped.Detail}");
+
+    /// <summary>The checked web apps a gateway routes to, each with its node of the diagram.</summary>
+    private static List<(RuntimeNode Node, Entry Entry)> Routed(RuntimeManifest manifest, string gateway, Dictionary<string, Entry> byAlias) =>
+        [.. manifest.Edges
+            .Where(edge => edge.Kind == RuntimeEdgeKind.Route && edge.From == gateway && byAlias.ContainsKey(edge.To))
+            .Select(edge => (manifest.Nodes.First(node => node.Alias == edge.To), byAlias[edge.To]))];
+
+    /// <summary>
+    /// The gateway from the checks that pass through it: the web apps' public address is the gateway's, so a check
+    /// that passes says the gateway routed it. One that fails does not say it did not, since the web app may be the
+    /// cause.
+    /// </summary>
+    private static RuntimeTile GatewayTile(RuntimeNode node, List<(RuntimeNode Node, Entry Entry)> routed, RuntimeManifest manifest, TimeZoneInfo zone)
+    {
+        if (routed.Count == 0)
+        {
+            var unknown = manifest.Edges.Any(edge => edge.Kind == RuntimeEdgeKind.Route && edge.From == node.Alias);
+            return NeutralTile(
+                node,
+                unknown ? "Not checked" : "Not probed",
+                unknown ? "not in topology.json" : "not probed from the browser",
+                $"{node.Name}: this page does not check the gateway on its own, and it checks no web app behind it.");
+        }
+
+        var passed = routed.Where(route => route.Entry.Target.Last is { State: HealthState.Healthy }).ToList();
+        if (passed.Count > 0)
+        {
+            var names = string.Join(", ", passed.Select(route => route.Node.Name));
+            var latest = passed.Max(route => route.Entry.Target.Last!.CheckedAt);
+            var line = passed.Count == 1 ? $"check of {passed[0].Node.Name} passed through it" : $"checks of {passed.Count} web apps passed through it";
+            return new RuntimeTile(
+                node.Alias,
+                Healthy,
+                "Reachable",
+                null,
+                [new RuntimeTileLine(line, "ok")],
+                null,
+                $"{node.Name}: reachable. This page does not check the gateway on its own; the check of {names} was answered through it (last {TimeText.Clock(latest, zone)}).");
+        }
+
+        if (routed.Any(route => route.Entry.Target.State == HealthState.Pending))
+        {
+            return new RuntimeTile(node.Alias, Checking, "Checking", null, [new RuntimeTileLine("waiting for the checks", "muted")], null, $"{node.Name}: waiting for the checks of the web apps behind it.");
+        }
+
+        return NeutralTile(
+            node,
+            "Not confirmed",
+            "no check through it passes",
+            $"{node.Name}: no web app behind it passes its check, so this page cannot tell whether the gateway routes: the gateway or the web app may be the cause.");
+    }
+
+    private static RuntimeTile WebAppTile(RuntimeNode node, Entry entry, EnvironmentStatus environment, TimeZoneInfo zone, ClusterSleep? sleep)
     {
         var target = entry.Target;
         var lines = new List<RuntimeTileLine> { VersionLine(target, entry.Deployable) };
-        if (PinnedLine(environment.AssessVersions(entry.Deployable), target) is { } pinned)
+        if (PinnedLine(environment.AssessVersions(entry.Deployable, sleep), target) is { } pinned)
         {
             lines.Add(pinned);
         }
@@ -221,8 +345,11 @@ public static class RuntimePayloadBuilder
             lines.AddRange(TelemetryLines(node, target, telemetry));
         }
 
-        lines.Add(entry.Assessment.OnlyNode is null ? RoleLine(target, entry.Expected) : SingleNodeLine(target, entry.Expected));
-        return Checked(node, target, lines, zone) with
+        // An asleep node's last line says why it serves nothing, in place of "not serving".
+        lines.Add(entry.Sleeping is { } sleeping ? new RuntimeTileLine(sleeping.Sleep.Reason, "muted")
+            : entry.Assessment.OnlyNode is null ? RoleLine(target, entry.Expected)
+            : SingleNodeLine(target, entry.Expected));
+        return Checked(node, entry, lines, zone) with
         {
             Link = Link(target, LinkSet.LiveMetrics, node.Name),
             NameLink = Link(target, LinkSet.Portal, node.Name),
@@ -331,23 +458,34 @@ public static class RuntimePayloadBuilder
             FrontDoorAgreement.Disagrees => new RuntimeTileLine("disagrees with the web apps", "warn"),
             _ => new RuntimeTileLine("being compared with the web apps", "muted"),
         });
-        return Checked(node, entry.Target, lines, zone, assessment.FrontDoorText) with
+        return Checked(node, entry, lines, zone, assessment.FrontDoorText) with
         {
             NameLink = Link(entry.Target, LinkSet.FrontDoor, entry.Deployable.Info.Name),
         };
     }
 
-    private static RuntimeTile Checked(RuntimeNode node, TargetStatus target, List<RuntimeTileLine> lines, TimeZoneInfo zone, string? note = null)
+    private static RuntimeTile Checked(RuntimeNode node, Entry entry, List<RuntimeTileLine> lines, TimeZoneInfo zone, string? note = null)
     {
+        var target = entry.Target;
         var last = target.Last;
+        var asleep = entry.Sleeping;
+        var label = asleep is null ? HealthClassifier.Label(target.State) : ClusterSleep.Label;
         var facts = last switch
         {
+            _ when asleep is not null => "no answer, as expected",
             null => "not checked yet",
             { StatusCode: { } status, LatencyMs: { } latency } => string.Create(CultureInfo.InvariantCulture, $"HTTP {status} · {latency} ms"),
             { StatusCode: { } status } => string.Create(CultureInfo.InvariantCulture, $"HTTP {status}"),
             _ => "no answer",
         };
-        var title = new List<string> { $"{node.Name}: {HealthClassifier.Label(target.State)}", target.Url.AbsoluteUri };
+        var title = new List<string> { $"{node.Name}: {label}", target.Url.AbsoluteUri };
+        if (asleep is not null)
+        {
+            // The health view's words for an asleep tile, and what Azure reports.
+            title.Add(asleep.Sleep.NodeDetail);
+            title.Add(asleep.Detail);
+        }
+
         if (last is not null)
         {
             title.Add($"Last check {TimeText.Clock(last.CheckedAt, zone)}{(last.Detail is { } detail ? $": {detail}" : string.Empty)}");
@@ -359,10 +497,11 @@ public static class RuntimePayloadBuilder
             title.Add(note);
         }
 
+        // The checks themselves keep their states: the history strip of an asleep node shows them as they were.
         return new RuntimeTile(
             node.Alias,
-            StateOf(target.State),
-            HealthClassifier.Label(target.State),
+            asleep is null ? StateOf(target.State) : Asleep,
+            label,
             facts,
             lines,
             [.. target.History.Select(result => StateOf(result.State))],
@@ -457,8 +596,21 @@ public static class RuntimePayloadBuilder
         return known.Count == 0 ? new RuntimeRegionMark(region.Alias, Neutral, "not checked") : Region(region.Alias, known);
     }
 
+    /// <summary>
+    /// The frame of the cluster itself: the health view's banner while the environment is asleep, and no words
+    /// otherwise (the page knows a running cluster by its web apps, whose frame says whether they serve).
+    /// </summary>
+    private static RuntimeRegionMark ClusterMark(RuntimeRegion region, Sleeping? whole) =>
+        whole is null ? new RuntimeRegionMark(region.Alias, Neutral, string.Empty) : new RuntimeRegionMark(region.Alias, Asleep, whole.Sleep.Headline);
+
     private static RuntimeRegionMark Region(string alias, List<Entry> apps)
     {
+        // The chip of the health view's environment heading: none of its web apps answers, and that is expected.
+        if (apps.All(entry => entry.Sleeping is not null))
+        {
+            return new RuntimeRegionMark(alias, Asleep, ClusterSleep.Label.ToLowerInvariant());
+        }
+
         if (apps.Any(entry => ReferenceEquals(entry.Target, entry.Expected)))
         {
             return new RuntimeRegionMark(alias, "serving", "serving traffic");
@@ -529,18 +681,36 @@ public static class RuntimePayloadBuilder
 
             case RuntimeEdgeKind.Public:
             {
-                var target = to ?? from;
-                var state = target is null ? Neutral : target.Target.State switch
-                {
-                    HealthState.Healthy => "active",
-                    HealthState.Pending => Checking,
-                    _ => "down",
-                };
-                var (number, counted, trend) = PublicCalls(edge, manifest, byAlias);
+                // The public address is a checked node's own, or a gateway's, which stands for the web apps it routes to.
+                List<Entry> targets = to is not null ? [to]
+                    : Routed(manifest, edge.To, byAlias) is { Count: > 0 } routed ? [.. routed.Select(route => route.Entry)]
+                    : from is not null ? [from]
+                    : [];
+                var state = targets.Count == 0 ? Neutral
+                    : targets.All(entry => entry.Sleeping is not null) ? Asleep
+                    : targets.Any(entry => entry.Target.State == HealthState.Healthy) ? "active"
+                    : targets.Any(entry => entry.Target.State == HealthState.Pending) ? Checking
+                    : "down";
+                var target = targets.Count > 0 ? targets[0] : null;
+                var (number, counted, trend) = PublicCalls(edge, manifest, byAlias, targets.Count == 1 && to is null ? targets[0].Target : null);
                 var requests = number == NoNumber || target is null
                     ? null
                     : RuntimeLink.To(target.Deployable.Info.Links?[LinkSet.Logs], LinkText.For(LinkSet.Logs, target.Deployable.Info.Name));
                 return new RuntimeEdgeMark(edge.Id, state, number, CallsUnit, null, $"The browser to {edge.To}: {Words(state)} {counted}", requests, RuntimeTrend.Of(trend));
+            }
+
+            case RuntimeEdgeKind.Route:
+            {
+                // No number line: the web app counts its calls, and the public relationship shows them.
+                var state = to is null ? Neutral
+                    : to.Sleeping is not null ? Asleep
+                    : to.Target.State switch
+                    {
+                        HealthState.Healthy => "active",
+                        HealthState.Pending => Checking,
+                        _ => "down",
+                    };
+                return new RuntimeEdgeMark(edge.Id, state, null, null, null, $"{edge.From} routes to {edge.To}. {Words(state)}");
             }
 
             default:
@@ -552,7 +722,8 @@ public static class RuntimePayloadBuilder
     /// The calls to a public address: for a Front Door endpoint, the sum of what its origins counted as forwarded by
     /// Front Door (no caching rule is set, so every call reaches an origin); for a web app's own address, its direct calls.
     /// </summary>
-    private static (string Number, string Words, Trend? Trend) PublicCalls(RuntimeEdge edge, RuntimeManifest manifest, Dictionary<string, Entry> byAlias)
+    /// <param name="routed">The only web app behind a gateway that holds the public address; null otherwise.</param>
+    private static (string Number, string Words, Trend? Trend) PublicCalls(RuntimeEdge edge, RuntimeManifest manifest, Dictionary<string, Entry> byAlias, TargetStatus? routed)
     {
         var origins = manifest.Edges
             .Where(other => other.Kind == RuntimeEdgeKind.Origin && other.From == edge.To)
@@ -566,7 +737,7 @@ public static class RuntimePayloadBuilder
                 : (Number(counted.Sum(telemetry => telemetry.FromFrontDoor)), "Calls per minute: the sum of what its origins counted from Front Door.", Trends.Sum(origins.OfType<TargetStatus>()));
         }
 
-        var direct = byAlias.GetValueOrDefault(edge.To)?.Target;
+        var direct = byAlias.GetValueOrDefault(edge.To)?.Target ?? routed;
         return direct?.Telemetry is not { } own
             ? (NoNumber, "Calls per minute: the web app reports none.", null)
             : (Number(own.Direct), "Calls per minute: counted by the web app.", Trends.Direct(direct));
@@ -574,7 +745,8 @@ public static class RuntimePayloadBuilder
 
     /// <summary>Whether the traffic of a node's deployable goes through this node, by the serving decision.</summary>
     private static string Carries(Entry entry) =>
-        ReferenceEquals(entry.Target, entry.Expected) ? "active"
+        entry.Sleeping is not null ? Asleep
+        : ReferenceEquals(entry.Target, entry.Expected) ? "active"
         : entry.Target.State == HealthState.Healthy ? "idle"
         : entry.Target.State == HealthState.Pending ? Checking
         : "down";
@@ -584,6 +756,7 @@ public static class RuntimePayloadBuilder
         "active" => "Carries the traffic.",
         "idle" => "Idle: no traffic expected.",
         "down" => "Down: its end is not healthy.",
+        Asleep => "Asleep: nothing answers from inside a stopped cluster, and that is expected.",
         Checking => "Being checked.",
         _ => "Not checked.",
     };

@@ -2,7 +2,7 @@
    node, the mark of a region. The swatches use the same classes as the diagram (css/app.css, "Runtime view"). *@
 <div class="runtime-legend" aria-label="Legend of the runtime diagram" role="group">
     <ul>
-        @foreach (var (state, text) in Nodes)
+        @foreach (var (state, text) in Asleep ? Nodes.Append(AsleepNode) : Nodes)
         {
             <li>
                 <svg class="runtime-legend__swatch" viewBox="0 0 30 18" width="30" height="18" aria-hidden="true" focusable="false">
@@ -13,7 +13,7 @@
         }
     </ul>
     <ul>
-        @foreach (var (state, text) in Regions)
+        @foreach (var (state, text) in Asleep ? Regions.Append(AsleepRegion) : Regions)
         {
             <li>
                 <svg class="runtime-legend__swatch" viewBox="0 0 30 18" width="30" height="18" aria-hidden="true" focusable="false">
@@ -33,25 +33,43 @@
                 <span>@text</span>
             </li>
         }
-        <li>
-            <svg class="runtime-legend__swatch" viewBox="0 0 30 18" width="30" height="18" aria-hidden="true" focusable="false">
-                <g class="rt-number rt-number--counted"><rect class="rt-number__hook" x="1.5" y="2.5" width="27" height="13" rx="3" /></g>
-            </svg>
-            <span>calls/min: the last minute, counted by the web apps themselves</span>
-        </li>
-        <li>
-            <svg class="runtime-legend__swatch" viewBox="0 0 30 18" width="30" height="18" aria-hidden="true" focusable="false">
-                <g class="rt-number"><rect class="rt-number__hook" x="1.5" y="2.5" width="27" height="13" rx="3" /></g>
-            </svg>
-            <span>– calls/min: no web app reports this number</span>
-        </li>
+        @* The number lines exist only where a web app counts its calls (telemetryPath). *@
+        @if (Counts)
+        {
+            <li>
+                <svg class="runtime-legend__swatch" viewBox="0 0 30 18" width="30" height="18" aria-hidden="true" focusable="false">
+                    <g class="rt-number rt-number--counted"><rect class="rt-number__hook" x="1.5" y="2.5" width="27" height="13" rx="3" /></g>
+                </svg>
+                <span>calls/min: the last minute, counted by the web apps themselves</span>
+            </li>
+            <li>
+                <svg class="runtime-legend__swatch" viewBox="0 0 30 18" width="30" height="18" aria-hidden="true" focusable="false">
+                    <g class="rt-number"><rect class="rt-number__hook" x="1.5" y="2.5" width="27" height="13" rx="3" /></g>
+                </svg>
+                <span>– calls/min: no web app reports this number</span>
+            </li>
+        }
     </ul>
 </div>
 
 @code {
+    /// <summary>True where an environment can read as asleep (a cluster with <c>environments</c> and Azure's facts): the legend then explains it.</summary>
+    [Parameter]
+    public bool Asleep { get; set; }
+
+    /// <summary>True where a web app reports its calls per minute; the legend of the number lines is shown only then.</summary>
+    [Parameter]
+    public bool Counts { get; set; } = true;
+
+    private static readonly (string State, string Text) AsleepNode =
+        ("asleep", "Asleep: no answer, as expected: its cluster is stopped on purpose");
+
+    private static readonly (string State, string Text) AsleepRegion =
+        ("asleep", "Asleep: the cluster is stopped; nothing answers from inside it");
+
     private static readonly (string State, string Text)[] Nodes =
     [
-        ("healthy", "Healthy: HTTP 200 (the database: a health check through it passes)"),
+        ("healthy", "Healthy: HTTP 200 (the database, a gateway: a health check through it passes)"),
         ("unhealthy", "Unhealthy: answers, not HTTP 200"),
         ("unreachable", "Unreachable: no answer"),
         ("checking", "Checking"),
@@ -70,7 +88,7 @@
     private static readonly (string State, string Text)[] Edges =
     [
         ("active", "Carries the traffic"),
-        ("idle", "Idle: no traffic expected"),
+        ("idle", "Idle: no traffic expected (also while the cluster is asleep)"),
         ("down", "Down: its target is not healthy"),
     ];
 }

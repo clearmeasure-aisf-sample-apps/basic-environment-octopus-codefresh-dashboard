@@ -2,8 +2,9 @@
 @inject RuntimeLoader Loader
 @inject IJSRuntime JS
 
-@* The runtime view: the environment's C4 deployment diagram, rendered by PlantUML at deploy time, updated in place
-   from the same monitor as the health view (js/runtime.js draws; RuntimePayloadBuilder decides what). *@
+@* The runtime view: the environment's C4 deployment diagram, rendered by PlantUML (by the deployment in the kit; in
+   this repository by scripts/write-runtime.ps1, committed as deploy/runtime/), updated in place from the same monitor
+   as the health view (js/runtime.js draws; RuntimePayloadBuilder decides what). *@
 <section class="runtime" aria-labelledby="runtime-title">
     <header class="runtime__header">
         <h2 id="runtime-title">Runtime@(Current is { } shown ? $": {shown.Name}" : string.Empty)</h2>
@@ -30,8 +31,9 @@
     else if (_index.Availability == RuntimeAvailability.NotDeployed)
     {
         <p class="empty runtime__absent" role="status">
-            The runtime diagram is not available for this deployment: the site has no <code>runtime/</code> folder. The
-            deployment of a newer dashboard release renders it. The Health view shows every node.
+            The runtime diagram is not available: this site was published without a <code>runtime/</code> folder.
+            <code>scripts/write-runtime.ps1</code> of the dashboard's repository renders it, and the build publishes what
+            is committed in <code>deploy/runtime/</code>. The Health view shows every node.
         </p>
     }
     else if (_index.Index is not { } loaded)
@@ -48,7 +50,7 @@
     }
     else if (loaded.Environments.Count == 0)
     {
-        <p class="empty">The deployment rendered no runtime diagram: system.json has no environment.</p>
+        <p class="empty">No runtime diagram was rendered: <code>runtime/index.json</code> lists no environment.</p>
     }
     else
     {
@@ -69,15 +71,34 @@
             {
                 <text>
                     Live, from the checks of this page: the state of every web app, whether it serves traffic and the versions
-                    next to the pinned ones. Drawn when the dashboard was deployed: the resources, their names and sizes. The
+                    next to the pinned ones. Drawn when the diagram was rendered: the resources, their names and sizes. The
                     database takes no call from the browser: it is reachable when the health check of a web app that uses it
-                    passes. Calls per minute are the last minute as each web app counts it (its <code>/_telemetry</code>):
-                    requests and SQL commands; a dash where a web app reports none.
+                    passes, and so is a gateway that check goes through.
+                </text>
+                @if (Monitor.Topology.HasTelemetry)
+                {
+                    <text>
+                        Calls per minute are the last minute as each web app counts it (its <code>/_telemetry</code>):
+                        requests and SQL commands; a dash where a web app reports none.
+                    </text>
+                }
+            }
+            @if (Monitor.Topology.HasTelemetry)
+            {
+                <text>
+                    "Generate traffic" at the bottom of the page makes them move.
+                    The small line next to a number is its trend over the last checks of this page.
                 </text>
             }
-            "Generate traffic" at the bottom of the page makes them move.
-            The small line next to a number is its trend over the last checks of this page. An underlined number or name
-            is a link: it opens the Azure portal or Octopus Deploy in a new tab, which ask you to sign in.
+            @if (Monitor.Topology.CanSleep)
+            {
+                <text>
+                    While Azure reports an environment's cluster stopped, what does not answer from inside it is asleep, not
+                    failed: stopped on purpose, until the next deployment wakes it.
+                </text>
+            }
+            An underlined number or name is a link: it opens the Azure portal or Octopus Deploy in a new tab, which ask
+            you to sign in.
         </p>
         @if (_diagram is { IsValid: false } broken)
         {
@@ -132,10 +153,13 @@
             </section>
         }
 
-        <RuntimeLegend />
+        <RuntimeLegend Asleep="Monitor.Topology.CanSleep" Counts="Monitor.Topology.HasTelemetry" />
         @if (loaded.PlantUml is { } version)
         {
-            <p class="help">Rendered with PlantUML @version when the dashboard was deployed.</p>
+            @* The static part of the diagram is as old as its rendering: say when that was, where the index does. *@
+            <p class="help">
+                Rendered with PlantUML @version@(loaded.Generated is { } rendered ? $" on {TimeText.DateAndTime(rendered, Zone)}: the resources, their names and their relationships are as of then" : string.Empty).
+            </p>
         }
     }
 </section>
@@ -249,8 +273,10 @@
             return;
         }
 
+        // Asleep by the health view's decision: the sleep of the cluster that hosts the shown environment.
         var environment = Shown;
-        var payload = RuntimePayloadBuilder.Build(diagram.Manifest!, environment, Page, Zone).ToJson();
+        var sleep = environment is null ? null : Monitor.SleepOf(environment);
+        var payload = RuntimePayloadBuilder.Build(diagram.Manifest!, environment, Page, Zone, sleep, Now).ToJson();
         if (payload == _lastPayload)
         {
             return;

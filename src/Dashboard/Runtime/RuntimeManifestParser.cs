@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace Dashboard.Runtime;
@@ -10,10 +11,10 @@ public sealed record RuntimeParseResult<T>(T? Value, IReadOnlyList<string> Error
 }
 
 /// <summary>
-/// Reads <c>runtime/index.json</c> and <c>runtime/&lt;env&gt;.json</c>. The deployment writes both next to the SVG it
-/// rendered (<c>deploy-staticwebapp.ps1</c>). Required: the index's environments with their name, manifest and SVG;
-/// the manifest's nodes with alias and kind, the regions with alias, the relationships with id. Unknown fields and
-/// kinds are kept apart, not refused: a newer diagram still shows.
+/// Reads <c>runtime/index.json</c> and <c>runtime/&lt;env&gt;.json</c>. Whatever renders the diagrams writes both next to
+/// the SVG (the kit's <c>deploy-staticwebapp.ps1</c>; in this repository <c>scripts/write-runtime.ps1</c>). Required: the
+/// index's environments with their name, manifest and SVG; the manifest's nodes with alias and kind, the regions with
+/// alias, the relationships with id. Unknown fields and kinds are kept apart, not refused: a newer diagram still shows.
 /// </summary>
 public static class RuntimeManifestParser
 {
@@ -58,7 +59,7 @@ public static class RuntimeManifestParser
 
             return errors.Count > 0
                 ? new RuntimeParseResult<RuntimeIndex>(null, errors)
-                : new RuntimeParseResult<RuntimeIndex>(new RuntimeIndex(entries, Text(root, "plantuml")), []);
+                : new RuntimeParseResult<RuntimeIndex>(new RuntimeIndex(entries, Text(root, "plantuml"), Time(root, "generated")), []);
         }
     }
 
@@ -102,7 +103,8 @@ public static class RuntimeManifestParser
                     Text(element, "deployable"),
                     Text(element, "role")?.ToLowerInvariant(),
                     Text(element, "region"),
-                    Text(element, "regionAlias"));
+                    Text(element, "regionAlias"),
+                    Text(element, "qualifiedName"));
             });
             var regions = ReadArray(root, "regions", errors, (element, path) =>
             {
@@ -116,7 +118,7 @@ public static class RuntimeManifestParser
                 var roles = element.TryGetProperty("roles", out var array) && array.ValueKind == JsonValueKind.Array
                     ? array.EnumerateArray().Where(role => role.ValueKind == JsonValueKind.String).Select(role => role.GetString()!).ToList()
                     : [];
-                return new RuntimeRegion(alias, Text(element, "name") ?? alias, roles);
+                return new RuntimeRegion(alias, Text(element, "name") ?? alias, roles, Text(element, "qualifiedName"));
             });
             var edges = ReadArray(root, "edges", errors, (element, path) =>
             {
@@ -229,6 +231,13 @@ public static class RuntimeManifestParser
         return string.IsNullOrEmpty(text) ? null : text;
     }
 
+    /// <summary>A moment as the deployment writes it (ISO 8601); null when absent or not one: it is only shown.</summary>
+    private static DateTimeOffset? Time(JsonElement parent, string property) =>
+        Text(parent, property) is { } text
+        && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var moment)
+            ? moment
+            : null;
+
     private static Uri? Address(JsonElement parent, string property) =>
         Text(parent, property) is { } text
         && Uri.TryCreate(text, UriKind.Absolute, out var address)
@@ -243,6 +252,8 @@ public static class RuntimeManifestParser
         "webapp" => RuntimeNodeKind.WebApp,
         "sql" => RuntimeNodeKind.Sql,
         "staticsite" => RuntimeNodeKind.StaticSite,
+        "gateway" => RuntimeNodeKind.Gateway,
+        "workload" => RuntimeNodeKind.Workload,
         _ => RuntimeNodeKind.Other,
     };
 
@@ -252,6 +263,7 @@ public static class RuntimeManifestParser
         "origin" => RuntimeEdgeKind.Origin,
         "sql" => RuntimeEdgeKind.Sql,
         "dashboard" => RuntimeEdgeKind.Dashboard,
+        "route" => RuntimeEdgeKind.Route,
         _ => RuntimeEdgeKind.Other,
     };
 }

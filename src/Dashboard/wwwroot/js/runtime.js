@@ -1,7 +1,7 @@
-// The runtime view: the environment's C4 deployment diagram, rendered by PlantUML when the dashboard was deployed
-// (runtime/<env>.svg), inserted inline and updated in place from a payload the C# side builds (RuntimePayload).
+// The runtime view: the environment's C4 deployment diagram, rendered by PlantUML (runtime/<env>.svg), inserted inline
+// and updated in place from a payload the C# side builds (RuntimePayload).
 //
-// What this relies on in PlantUML's SVG (the deployment checks every render for it; README, "The runtime view"):
+// What this relies on in PlantUML's SVG (whatever renders it checks every render for it; README, "The runtime view"):
 //   node          <g class="entity" data-qualified-name="sub.rg_tier.region_primary.plan_primary.app_ui_primary">:
 //                 the alias is the last part; its rect (a database: its paths) is the box; its <image> is the slot
 //   region        <g class="cluster" data-qualified-name="..."> : its first rect is the frame; its <image> is the slot
@@ -43,8 +43,11 @@ function slotLayer(group) {
   if (!group.dataset.rtSlot) return null;
   const [x, y, width, height] = group.dataset.rtSlot.split(' ').map(Number);
   let layer = [...group.children].find(child => child.localName === 'g' && child.classList.contains('rt-slot'));
-  if (layer) layer.replaceChildren();
-  else {
+  if (layer) {
+    // A redraw starts from nothing: the classes of the state drawn before must not outlive it.
+    layer.replaceChildren();
+    layer.setAttribute('class', 'rt-slot');
+  } else {
     layer = el('g', { class: 'rt-slot' });
     group.appendChild(layer);
   }
@@ -130,6 +133,10 @@ function icon(kind, cx, cy, cls) {
     case 'neutral':
       add('circle', { cx: 6, cy: 6, r: 5.25, class: 'rt-icon__ring' });
       add('path', { d: 'M3.5 6h5', class: 'rt-icon__line' });
+      break;
+    case 'asleep':
+      // The health view's crescent: stopped on purpose, neither good nor bad.
+      add('path', { d: 'M10.65 7.05A4.8 4.8 0 1 1 4.95 1.35a4.2 4.2 0 0 0 5.7 5.7z', class: 'rt-icon__fill' });
       break;
     default: // checking, unknown
       add('circle', { cx: 6, cy: 6, r: 5.25, class: 'rt-icon__ring' });
@@ -245,6 +252,8 @@ function drawTile(group, tile) {
 function drawRegion(group, mark) {
   const slot = slotLayer(group);
   if (!slot) return;
+  // A frame without words (a cluster that is not asleep) keeps its place and shows nothing.
+  if (!mark.label) return;
   const { x, y, width, height, layer } = slot;
   layer.classList.add('rt-mark', `rt-mark--${mark.state}`);
   const centre = x + width / 2;
@@ -256,7 +265,7 @@ function drawRegion(group, mark) {
   text.setAttribute('x', left + (pill ? 16 : 0));
   if (pill) {
     layer.insertBefore(el('rect', { x: left - 8, y: y + 1, width: contentWidth + 16, height: height - 2, rx: (height - 2) / 2, class: 'rt-mark__back' }), text);
-    const kind = { serving: 'serving', standby: 'standby', down: 'unreachable' }[mark.state] || 'checking';
+    const kind = { serving: 'serving', standby: 'standby', down: 'unreachable', asleep: 'asleep' }[mark.state] || 'checking';
     layer.insertBefore(icon(kind, left + 6, y + height / 2, 'rt-mark__icon'), text);
   }
 }

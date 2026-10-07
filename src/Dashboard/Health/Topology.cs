@@ -13,6 +13,18 @@ public sealed record Topology(SystemInfo System, DateTimeOffset? Generated, IRea
     public bool HasFrontDoor => Environments.Any(environment => environment.Deployables.Any(deployable => deployable.FrontDoor is not null));
 
     /// <summary>
+    /// True when a deployable of any environment reports its own counts (<c>telemetryPath</c>): the runtime view's help
+    /// then speaks of calls per minute.
+    /// </summary>
+    public bool HasTelemetry => Environments.Any(environment => environment.Deployables.Any(deployable => deployable.TelemetryPath is not null));
+
+    /// <summary>
+    /// True when a cluster names the environments it hosts and where Azure's facts about it are read: such an
+    /// environment can read as asleep, and the runtime view's help and legend then say what that looks like.
+    /// </summary>
+    public bool CanSleep => Clusters.Any(cluster => cluster is { ServiceUrl: not null, Environments.Count: > 0 });
+
+    /// <summary>
     /// The cluster that hosts an environment: the one whose <c>environments</c> names it. Null for an environment no
     /// cluster names, and a cluster without <c>environments</c> claims none: the health view then knows no cluster
     /// behind the environment's nodes, and an unreachable node is a failure.

@@ -29,7 +29,9 @@ public class RuntimeManifestParserTests
             manifest.Nodes.Select(node => node.Kind));
         var primary = manifest.Nodes.Single(node => node.Alias == "app_ui_primary");
         Assert.Equal(
-            new RuntimeNode("app_ui_primary", RuntimeNodeKind.WebApp, "app-cmdemo2-uat-ui", new Uri("https://app-cmdemo2-uat-ui.azurewebsites.net"), "ui", "primary", "westus3", "region_primary"),
+            new RuntimeNode(
+                "app_ui_primary", RuntimeNodeKind.WebApp, "app-cmdemo2-uat-ui", new Uri("https://app-cmdemo2-uat-ui.azurewebsites.net"), "ui", "primary", "westus3", "region_primary",
+                "sub.rg_tier.region_primary.plan_primary.app_ui_primary"),
             primary);
         Assert.Null(manifest.Nodes.Single(node => node.Alias == "sqldb").Url);
         Assert.Equal(["region_standby", "region_primary", "region_data"], manifest.Regions.Select(region => region.Alias));
