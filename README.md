@@ -741,7 +741,7 @@ While it holds, an endpoint of the environment that does not answer (Unreachable
 |---|---|---|
 | Tile | Red edge, the cross and "Unreachable", the reason ("No answer within 10 s."). | Neutral edge, a crescent and "Asleep", "No answer, as expected: cluster aks-platform-nonprod is stopped."; the stubs of the history strip in the neutral ink. |
 | Banner of a deployable none of whose nodes answers | Red, "Not serving: southcentralus" or "No healthy node: nothing can serve traffic". | Neutral, "Asleep: cluster aks-platform-nonprod is stopped", and under it "Azure reports the power state Stopped, as of 20:40:04 (5 min ago). Nothing answers from inside a stopped cluster: that is expected, not a failure." |
-| Heading of an environment none of whose endpoints answers | | A chip "asleep" next to the tier. |
+| Heading of an environment none of whose endpoints answers | No chip. | A chip "asleep" (with the crescent) next to the tier. |
 | Versions line | "Not compared: southcentralus is unreachable." | "Not compared: southcentralus is asleep." |
 | Summary | Counted as not healthy. | Counted on its own (below). |
 | Events | A problem: "workorders: Healthy → Unreachable: No answer within 10 s", "No healthy node: ...". | For information: "workorders: Healthy → Asleep: cluster aks-platform-nonprod is stopped", "Asleep: cluster aks-platform-nonprod is stopped; southcentralus no longer serves traffic." |

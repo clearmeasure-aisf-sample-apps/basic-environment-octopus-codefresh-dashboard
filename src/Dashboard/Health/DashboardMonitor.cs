@@ -65,9 +65,14 @@ public sealed class DashboardMonitor
         foreach (var monitor in Clusters)
         {
             monitor.Changed += () => Changed?.Invoke();
-            foreach (var environment in Environments.Where(environment => monitor.Info.Hosts(environment.Name)))
+        }
+
+        // The cluster behind an environment, where one names it: its sleep is the environment's.
+        foreach (var environment in Environments)
+        {
+            if (topology.ClusterOf(environment.Name) is { } info && Clusters.FirstOrDefault(monitor => ReferenceEquals(monitor.Info, info)) is { } host)
             {
-                _hosts.TryAdd(environment, monitor);
+                _hosts[environment] = host;
             }
         }
     }

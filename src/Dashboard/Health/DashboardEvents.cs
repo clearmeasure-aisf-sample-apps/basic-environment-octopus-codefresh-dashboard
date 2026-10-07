@@ -38,7 +38,7 @@ public enum EventLevel
 /// <param name="Environment">The environment; null for an event of the page itself.</param>
 /// <param name="Node">
 /// The node (its region, or its name), "Front Door", or the deployable for an event of all its nodes; "cluster" or
-/// "AKS" for an event of the cluster view.
+/// "AKS" for an event of the cluster view, with the cluster's name where the topology has several.
 /// </param>
 public sealed record DashboardEvent(DateTimeOffset At, EventKind Kind, EventLevel Level, string? Environment, string? Node, string Text);
 
