@@ -10,6 +10,14 @@
 > https://clearmeasure-aisf-sample-apps.github.io/basic-environment-octopus-codefresh-dashboard/ and every node must
 > allow the origin `https://clearmeasure-aisf-sample-apps.github.io` (see "CORS"). The sections below are the kit's
 > description of the dashboard; where they name a release through Octopus, this repository deploys to Pages instead.
+>
+> Two more differences come from this system's platform. It runs in **two AKS clusters** (`aks-platform-nonprod` hosts
+> tdd and uat, `aks-platform-prod` hosts prod), so the topology takes `clusters` next to `cluster` (see "Several
+> clusters"). And the clusters are **stopped on purpose** outside working hours and woken by the first deployment: an
+> environment whose cluster Azure reports stopped reads as **asleep**, not as failed (see "Asleep" in "How the states
+> are decided"). There is no collector inside the clusters, so the page knows a cluster only by what Azure says about
+> it: workflow `cluster-status` of this repository publishes that every ten minutes (see "The publisher: workflow
+> `cluster-status`"). It needs an identity in Azure, and does nothing until its three variables are set.
 
 A static web page that shows the health of every node of a multi-region system. It is a Blazor WebAssembly
 application (.NET 10, standalone): the browser itself calls the health endpoint of every node, so the dashboard needs
@@ -22,8 +30,9 @@ The header's controls (pause, interval, probe, check now) and its summary apply 
 renderings.
 
 A system that runs in a Kubernetes cluster has a third view, **Cluster** (`#cluster`): the AKS service as Azure
-reports it next to the cluster's own nodes, namespaces and pods (see "The cluster view"). The tab is there only when
-`topology.json` has `cluster`; without it the page is as it was: no tab, no request, no word about a cluster.
+reports it next to the cluster's own nodes, namespaces and pods (see "The cluster view"), one section per cluster.
+The tab is there only when `topology.json` has `cluster` or `clusters`; without them the page is as it was: no tab,
+no request, no word about a cluster.
 
 For each environment (tdd, uat, prod) and each deployable in it, the health view shows:
 
@@ -44,7 +53,8 @@ For each environment (tdd, uat, prod) and each deployable in it, the health view
 - the version the last deployment pinned in Git next to the versions the nodes run ("Pinned 2.4.7. In sync: all 2
   nodes run 2.4.7." or "Differs: eastus2 runs 2.4.6."), with a link to the Octopus Deploy project that deploys the
   deployable and to the history of the pins on GitHub;
-- in the header: the overall summary ("All 7 nodes healthy", "2 of 7 nodes not healthy"), the time of the last
+- in the header: the overall summary ("All 7 nodes healthy", "2 of 7 nodes not healthy"; with nodes of a stopped
+  cluster "All 3 nodes asleep", "The only awake node is healthy, 2 asleep"), the time of the last
   refresh, pause and resume, the interval (10 s, 30 s, 60 s) and the probe (health check or liveness), and a second
   line only while versions differ somewhere ("Versions differ in 1 environment").
 
@@ -68,8 +78,8 @@ their hosts do not exist, so every tile and every web app of the diagram shows U
 found. Point the sample at real nodes and at a real
 system repository to see them (and allow `http://localhost:5210` in the nodes' CORS settings, see below). The sample
 names no cluster, so it has no Cluster tab: a topology takes absolute addresses only, and the sample would have none
-to give for the cluster's two files. To see the view, add a `cluster` to the sample with the addresses of a real
-cluster's files, or of two files a local server serves (the tests' copies are `src/Dashboard.Tests/Samples/`).
+to give for the cluster's two files. To see the view, add a `cluster` (or `clusters`) to the sample with the addresses
+of a real cluster's files, or of two files a local server serves (the tests' copies are `src/Dashboard.Tests/Samples/`).
 
 ```
 dotnet build -c Release     # warnings are errors
@@ -153,9 +163,13 @@ topology" is pressed. The deployment writes the real file; the build does not kn
 | `cluster.statusUrl` | no, may be `null` | No "Cluster" card, no nodes and no pods: the cluster's own status is not read. |
 | `cluster.serviceUrl` | no, may be `null` | No "AKS service" card: Azure's facts are not read, and an unreachable cluster is not compared with them. |
 | `cluster.links` | no | No link to the cluster in the Azure portal. Keys: `portal`, `workloads`. |
+| `cluster.environments` | no, may be `null`; an array of environment names | The cluster does not say which environments it hosts: the cluster view groups its pods by every environment of the topology, and the health view never reads an environment as asleep (see "Several clusters" and "Asleep"). |
+| `clusters` | no, may be `null`; an array of the `cluster` object | As without `cluster`. With it, the cluster view has one section per entry, in the order of the file. Not together with `cluster`: a topology that has both (neither `null`) is an error. |
+| `clusters[].name`, `.statusUrl`, `.serviceUrl`, `.links`, `.environments` | no | As the same field of `cluster`, per cluster. |
 
 An address that is present (`system.repository`, `system.deliveryUrl`, `versionsUrl`, `versionsHistoryUrl`,
-`projectUrl`, `pinUrl`, `pinHistoryUrl`, `frontDoor`, `nodes[].url`, `cluster.statusUrl`, `cluster.serviceUrl`) must be
+`projectUrl`, `pinUrl`, `pinHistoryUrl`, `frontDoor`, `nodes[].url`, `cluster.statusUrl`, `cluster.serviceUrl`, and
+the same two of every entry of `clusters`) must be
 an absolute http(s) address: anything else is an error. A topology without `repository`, `versionsUrl`, `versionsHistoryUrl`, `projectUrl`, `pinUrl` and
 `pinHistoryUrl` is shown as before these fields existed: no line about versions, no request to GitHub. A `links`
 object is more forgiving, because a link is a courtesy: an entry whose value is not an absolute http(s) address is
@@ -163,6 +177,11 @@ left out (so is a `links` that is not an object), an unknown key is ignored, and
 stays plain text. The two links of `cluster.links` the page knows (`portal`, `workloads`) are held to the rule of the
 addresses instead: one that is present and not an absolute http(s) address is an error
 (`cluster.links.portal: not an absolute http or https address.`); any other key of `cluster.links` is ignored.
+
+A name in a cluster's `environments` is a reference, so it is held to a rule too: it must be the exact name of an
+environment of the topology (`clusters[0].environments[1]: "uta" is not an environment of the topology.`), and an
+environment has one cluster (`clusters[1].environments[0]: "tdd" is already hosted by clusters[0].`). `"environments":
+[]` is a cluster that hosts none; that is not the same as leaving the field out.
 
 Unknown fields are ignored. A file that is missing, is not JSON or breaks a rule above is not shown in part: the
 dashboard shows "The topology could not be read" with every reason and its place in the file (for example
@@ -417,6 +436,37 @@ every environment), the topology names the cluster, and the page gets a third ta
 
 and each environment the namespace that holds its pods, `"namespace": "cmdemo3-prod"`.
 
+### Several clusters
+
+A system whose environments run in more than one cluster names them in `clusters`, an array of the same object, each
+with the environments it hosts:
+
+```json
+"clusters": [
+  { "name": "aks-platform-nonprod", "environments": [ "tdd", "uat" ],
+    "serviceUrl": "https://raw.githubusercontent.com/example-org/dashboard/status/aks-platform-nonprod.json" },
+  { "name": "aks-platform-prod", "environments": [ "prod" ],
+    "serviceUrl": "https://raw.githubusercontent.com/example-org/dashboard/status/aks-platform-prod.json" }
+]
+```
+
+- **`cluster` or `clusters`, not both.** `cluster` (one object) is read exactly as before and is the same as
+  `clusters` with one entry. A topology with both is an error (`cluster and clusters: both are present; name the
+  clusters in one of them.`); one of the two may be `null` next to the other.
+- **One section per cluster**, in the order of the file, each with its own heading ("Cluster: aks-platform-prod"),
+  cards, nodes and pods; the words about the two sources stand once, above the first. With one cluster the view is
+  as it always was.
+- **Each cluster is read on its own**, with every round of the page's checks: its two files, its own "as of" and its
+  own note about old facts, its own trends. A cluster that cannot be read leaves the others alone.
+- **`environments`** names the environments a cluster hosts (also on the single `cluster`). With it, the heading
+  says "hosts tdd uat", the cluster's pods are grouped by these environments only, and the health view reads these
+  environments as asleep while Azure reports the cluster stopped (see "Asleep" in "How the states are decided").
+  Without it, a cluster groups its pods by every environment of the topology, as before, and puts no environment
+  to sleep: the page then knows no cluster behind an environment's nodes.
+- **Events** ("What just happened") of the only cluster name it as before ("cluster", "AKS"). Where the topology has
+  several, each event says which: "AKS aks-platform-prod", "cluster aks-platform-prod" (a cluster without a name is
+  numbered: "AKS 2").
+
 The view has two sources, and it shows them next to each other because they can differ: Azure can report a service
 available whose pods do not answer, and a stopped cluster reports nothing at all.
 
@@ -473,9 +523,58 @@ a `phase` that is absent is `Unknown`; unknown fields are ignored.
 ```
 
 `availability.state` is the verdict of Azure Resource Health: `Available`, `Unavailable`, `Degraded` or `Unknown`.
-`powerState` is `Running` or `Stopped`. Each number of `metrics` may be `null` or absent (Azure does not emit every
-metric for every cluster): its meter is then a dash, which is no problem. The file must be a JSON object that says
-something about the service (`availability`, `powerState` or `provisioningState`); everything else is optional.
+`powerState` is `Running` or `Stopped`; `Stopped`, in facts that are not older than 30 minutes, is what puts the
+cluster's environments to sleep in the health view. Each number of `metrics` may be `null` or absent (Azure does not
+emit every metric for every cluster): its meter is then a dash, which is no problem. The file must be a JSON object
+that says something about the service (`availability`, `powerState` or `provisioningState`); everything else is
+optional.
+
+### The publisher: workflow `cluster-status`
+
+`.github/workflows/cluster-status.yml` of this repository writes these facts, one file per cluster of the system:
+every ten minutes (GitHub starts scheduled runs late under load) and on demand (`workflow_dispatch`).
+`scripts/write-cluster-status.ps1` reads one cluster from Azure Resource Manager and only reads: `az aks show` (power
+state, provisioning state, version, tier, region, node pools), Azure Resource Health's current verdict and Azure
+Monitor's platform metrics of the last 15 minutes (both through `az rest --method get`). The verdict and the metrics
+are extras: when Azure refuses or has no value, the verdict is `Unknown` and a number is `null`, and the file is
+written all the same.
+
+- **Where**: `aks-platform-nonprod.json` and `aks-platform-prod.json`, the only files of branch `status`. Every run
+  replaces the branch with one new commit without a parent (a force-push), so `main` gets no commits and the branch
+  no history. The page reads `https://raw.githubusercontent.com/<org>/<repository>/status/<cluster>.json`
+  (`deploy/topology.json`, `clusters[].serviceUrl`). The clusters and their resource groups are the `CLUSTERS` list
+  at the top of the workflow.
+- **A cluster that cannot be read** keeps the file the branch has for it, so its facts grow old and the page says so;
+  the other cluster is published all the same, and the run fails.
+- **Credentials**: none stored. The run signs in to Azure with GitHub OIDC (`azure/login`) and pushes the branch with
+  its own token (`permissions: contents: write`, `id-token: write`).
+- **Switching it on** takes an identity in Azure and three repository variables (variables, not secrets: none of them
+  is a credential):
+
+  | Variable | Value |
+  |---|---|
+  | `AZURE_CLIENT_ID` | The client id of an app registration or a user-assigned managed identity. |
+  | `AZURE_TENANT_ID` | Its tenant. |
+  | `AZURE_SUBSCRIPTION_ID` | The subscription of the two clusters. |
+
+  The identity needs a federated credential for this repository's default branch (issuer
+  `https://token.actions.githubusercontent.com`, subject
+  `repo:clearmeasure-aisf-sample-apps/basic-environment-octopus-codefresh-dashboard:ref:refs/heads/main`, audience
+  `api://AzureADTokenExchange`): a scheduled run and a manual run of `main` both present that subject. Its role:
+  **Reader on the two AKS clusters** (`aks-platform-nonprod` in `rg-platform-nonprod-aks`, `aks-platform-prod` in
+  `rg-platform-prod-aks`), assigned on the clusters themselves or on their resource groups. Reader is enough for
+  everything the script reads: Resource Health (`Microsoft.ResourceHealth/availabilityStatuses/read`) and the
+  metrics (`Microsoft.Insights/metrics/read`) are read actions on the cluster, which Reader includes; Monitoring
+  Reader is not needed. A custom role with only `Microsoft.ContainerService/managedClusters/read` would still
+  publish the power state (which is all "asleep" needs), with the verdict `Unknown` and no metrics.
+- **Until the variables are set** a run reads nothing, publishes nothing and passes, with the notice "Repository
+  variable(s) not set: ...". The addresses then answer HTTP 404: the cluster view says "Azure's facts about the AKS
+  service are not published yet", and no environment is asleep.
+
+GitHub serves a file of `raw.githubusercontent.com` from a cache of about five minutes, so the facts a page reads are
+up to about a quarter of an hour behind Azure. That is the gap in which a cluster that was just stopped still shows
+its nodes as unreachable, and a cluster that was just woken is still called stopped in the cluster view (the health
+view believes a node that answers; see "Asleep").
 
 ### What the view shows
 
@@ -539,6 +638,10 @@ The states are the page's (Healthy, Unhealthy, Unreachable, Checking, with their
 | No answer, or another HTTP status | Unreachable | "The cluster's status file does not answer", the reason, and what Azure reports next to it: "Azure reports the AKS service Available and Running, as of 15:10:04 (5 min ago)." |
 | An answer that is not the file | Unhealthy, "Unreadable" | "The cluster's status file could not be read", and why ("The file is not valid JSON."). |
 
+A stopped cluster is said the same calm way in the health view: the environments it hosts (`environments`) are asleep
+there, not failed (see "Asleep" in "How the states are decided"). For a cluster without a `statusUrl`, as in this
+system, the "AKS service" card below is all the view has, and "Stopped" there is the whole story.
+
 A cordoned node is still a healthy one. A stale file is judged by the browser's clock against the cluster's: a
 browser whose clock is more than a minute ahead sees a fresh file as stale.
 
@@ -575,7 +678,7 @@ destination asks for a sign-in: the page holds no credential and calls none of t
 | `deployables[].links` | `frontDoor` | The Front Door profile in the Azure portal. | The Front Door endpoint's name. |
 | | `logs` | A Logs query: the requests of the app's role, by five minutes and instance. | "Requests in Logs" in the versions line; the number on the browser to Front Door arrow. |
 | `environments[].links` | `applicationInsights`, `applicationMap`, `database`, `resourceGroup` | The environment's Application Insights, its application map, its database, its resource group. | The links at the end of the environment's heading and under the runtime diagram; the database's name in the diagram. |
-| `cluster.links` | `portal` | The AKS cluster in the Azure portal. | "AKS cluster in the Azure portal" in the cluster view's "AKS service" card. |
+| `cluster.links`, `clusters[].links` | `portal` | The AKS cluster in the Azure portal. | "AKS cluster in the Azure portal" in the cluster view's "AKS service" card. |
 | | `workloads` | The cluster's workloads in the Azure portal. | "Workloads in the Azure portal" next to the cluster view's "Pods". |
 
 Two links need no entry, because the page builds them from what it reads: a web app's **version** leads to its
@@ -624,8 +727,49 @@ traffic", "not serving" or "checking", and neither names a primary, a standby, a
 their colours are the same. Where the topology has no Front Door endpoint at all, the page's help texts do not name
 Front Door either.
 
+**Asleep.** A cluster that is stopped on purpose (outside working hours, until the next deployment wakes it) answers
+nothing, and that is no outage. The page reads an environment as asleep when all of this holds (`ClusterSleep`):
+
+1. a cluster of the topology names the environment in its `environments`;
+2. the last reading of that cluster's facts from Azure (`serviceUrl`) succeeded and says `powerState` `Stopped`;
+3. the facts say when they were read (`generated`), and that is not longer ago than 30 minutes, the same notion of
+   old facts as the note of the "AKS service" card.
+
+While it holds, an endpoint of the environment that does not answer (Unreachable) is **Asleep**:
+
+| Where | Awake, as before | Asleep |
+|---|---|---|
+| Tile | Red edge, the cross and "Unreachable", the reason ("No answer within 10 s."). | Neutral edge, a crescent and "Asleep", "No answer, as expected: cluster aks-platform-nonprod is stopped."; the stubs of the history strip in the neutral ink. |
+| Banner of a deployable none of whose nodes answers | Red, "Not serving: southcentralus" or "No healthy node: nothing can serve traffic". | Neutral, "Asleep: cluster aks-platform-nonprod is stopped", and under it "Azure reports the power state Stopped, as of 20:40:04 (5 min ago). Nothing answers from inside a stopped cluster: that is expected, not a failure." |
+| Heading of an environment none of whose endpoints answers | | A chip "asleep" next to the tier. |
+| Versions line | "Not compared: southcentralus is unreachable." | "Not compared: southcentralus is asleep." |
+| Summary | Counted as not healthy. | Counted on its own (below). |
+| Events | A problem: "workorders: Healthy → Unreachable: No answer within 10 s", "No healthy node: ...". | For information: "workorders: Healthy → Asleep: cluster aks-platform-nonprod is stopped", "Asleep: cluster aks-platform-nonprod is stopped; southcentralus no longer serves traffic." |
+
+Everything else is exactly as before, because nothing then proves that the silence is on purpose: facts that say
+`Running`, facts that are not published (HTTP 404), not read yet, unreadable, without `generated` or older than 30
+minutes, a reading that failed after a good one (a failed reading replaces a good one), a cluster without
+`serviceUrl` or without `environments`, an environment no cluster names. An unreachable node is then a failure.
+
+A node that answers is never asleep, whatever Azure's facts say: it shows what it answered (Healthy, or Unhealthy
+for an HTTP error), and its deployable's banner is the serving decision's. So a cluster that was woken reads as
+awake with the first answer, although the facts may call it stopped for another quarter of an hour. The other way
+round there is a gap: a cluster that was just stopped shows red until the workflow has published `Stopped` and
+GitHub serves it. The states of the checks themselves do not change (the history strip, the runtime view and the
+events of earlier checks keep "Unreachable"): asleep is how the health view reads them. The runtime view does not
+know asleep; it shows such a node as unreachable.
+
 **Summary.** Every tile counts as one node: the Front Door endpoints and the web apps. Unhealthy and Unreachable both
-count as not healthy.
+count as not healthy. A node that is asleep is neither: it is counted on its own, and the other numbers are of the
+nodes that are awake.
+
+| Nodes | Summary |
+|---|---|
+| None asleep | As before: "All 7 nodes healthy", "The only node is healthy", "2 of 7 nodes not healthy", "Checking 3 nodes", "1 of 3 nodes healthy, 2 being checked". |
+| All asleep | "All 3 nodes asleep", "The only node is asleep", with the crescent: neither the check mark nor the warning. |
+| Some asleep, the others healthy | "The only awake node is healthy, 2 asleep", "All 2 awake nodes healthy, 1 asleep", with the check mark. |
+| Some asleep, an awake one not healthy | "1 of 2 awake nodes not healthy, 1 asleep", with the warning. |
+| Some asleep, others not checked yet | "Checking 2 nodes, 1 asleep", "1 of 2 awake nodes healthy, 1 being checked, 1 asleep". |
 
 **Probe.** "Health check" calls `healthPath`: the full check also connects to the database, which keeps a database
 that pauses when idle (a serverless one) awake. "Liveness" calls `alivePath`: it only asks whether the web app is
@@ -672,7 +816,9 @@ src/Dashboard                the Blazor WebAssembly app
   wwwroot/                   index.html, css/app.css, js/visibility.js, js/location.js, js/runtime.js, the sample
                              topology.json and runtime/
 src/Dashboard.Tests          xUnit tests of the health logic; Samples/ holds a cluster.json and an aks.json
-.github/workflows            build.yml, release.yml, secret-scan.yml
+deploy/topology.json         this system's topology: three environments in two clusters
+scripts/                     write-cluster-status.ps1: Azure's facts about one cluster, as aks.json
+.github/workflows            build.yml, cluster-status.yml, secret-scan.yml
 ```
 
 The health logic is in `src/Dashboard/Health` and has no dependency on the browser: reading the topology
@@ -684,7 +830,8 @@ the trends (`Trend`, `Trends`), the events (`EventDetector`, `EventLog`), the bu
 the delivery facts (`DeliveryReport`, `DeliveryText`) and the links (`LinkSet`, `LinkText`). The runtime view's logic is in `src/Dashboard/Runtime`: reading `runtime/`
 (`RuntimeManifestParser`, `RuntimeLoader`), the update of the diagram (`RuntimePayloadBuilder`) and the view in the
 address (`ViewAddress`). The cluster view's logic is in `src/Dashboard/Cluster`: the two files (`ClusterStatus`,
-`AksService`) and their reading (`ClusterReader`, `ClusterMonitor`), the states (`PodRules`, `ClusterAssessment`), the
+`AksService`) and their reading (`ClusterReader`, `ClusterMonitor`, one per cluster), the states (`PodRules`,
+`ClusterAssessment`), whether a cluster is asleep and what the health view then says (`ClusterSleep`), the
 grouping and the sums (`ClusterGroups`, `ClusterTotals`), the words and units (`ClusterText`) and the events
 (`ClusterEventDetector`). `HttpClient` and `TimeProvider` are injected, so the tests run them with a stub handler and
 fake time.
@@ -706,6 +853,9 @@ The site is static and expects to be served from the root of its host (`<base hr
   `<SYSTEM_SLUG>-<DEPLOYABLE_NAME>`. It signs in to Octopus with GitHub OIDC (environment `release`) and reads the
   repository variables `SYSTEM_SLUG`, `DEPLOYABLE_NAME`, `OCTOPUS_URL`, `OCTOPUS_SPACE_NAME` and
   `OCTOPUS_SERVICE_ACCOUNT_ID`.
+- **cluster-status** (`.github/workflows/cluster-status.yml`): every ten minutes and on demand, Azure's facts about
+  the two clusters, published on branch `status`; a green run with a notice until its three variables are set (see
+  "The publisher: workflow `cluster-status`").
 - **secret-scan** (`.github/workflows/secret-scan.yml`): gitleaks over the history of the commit every pull request and push checks out.
 
 For a system that serves the dashboard from its cluster (runtime aks-argocd), the release is an image instead:
@@ -789,13 +939,13 @@ the one before (`EventDetector`); nothing comes from a server's log, and a reloa
 
 | Event | When | Example |
 |---|---|---|
-| Health | An endpoint's state changed; at the first check only when it is not healthy. | "ui: Healthy → Unreachable: No answer within 10 s" |
+| Health | An endpoint's state changed; at the first check only when it is not healthy. An endpoint that stops answering while its cluster is known to be stopped falls asleep: for information, not a problem. | "ui: Healthy → Unreachable: No answer within 10 s", "workorders: Healthy → Asleep: cluster aks-platform-nonprod is stopped" |
 | Restart | A web app's `uptimeSeconds` went down, or (without it) its `startedAt` is later. Compared with its last reading, also across checks it did not answer. | "ui restarted, up 12 s" |
 | Deployment | A web app reports another version. Not for a Front Door endpoint, which answers for whichever node served. | "ui: 2.4.14 → 2.4.15, deployed" |
-| Serving region | At the end of a round, the node expected to serve changed: a failover, a failback, nothing serves, serves again. | "Failover: westus3 → eastus2. Primary westus3 is unreachable; eastus2 is expected to serve traffic." |
+| Serving region | At the end of a round, the node expected to serve changed: a failover, a failback, nothing serves, serves again. Nothing serves because the deployable is asleep: for information. | "Failover: westus3 → eastus2. Primary westus3 is unreachable; eastus2 is expected to serve traffic.", "Asleep: cluster aks-platform-nonprod is stopped." |
 | Pin | The version pinned in Git changed between two readings of `versions.json`, or of the deployable's own file (`pinUrl`). | "ui: pinned 2.4.14 → 2.4.15 in Git" |
 | Traffic | The traffic button was started, stopped or ran out. | "Traffic started: 2 requests a second for 60 s to ui at cmdemo2-uat-def456.z01.azurefd.net" |
-| Cluster | Only with `cluster` in the topology, between two readings of its files and never at the first: the status file stopped answering or answers again; the collector stopped writing (the file became stale) or writes again; a node is no longer ready or is ready again; per pod one event a round at most: its restart count rose, or else it became unhealthy, or else it is ready again; Azure's verdict on the AKS service or its power state changed. A round names ten pods and counts the rest. | "ui in cmdemo3-tdd restarted (7 restarts): CrashLoopBackOff", "Node aks-…000000 is not ready", "The cluster's status file stopped answering: no answer within 10 s", "Azure's verdict on the AKS service: Available → Degraded" |
+| Cluster | Only with `cluster` or `clusters` in the topology, per cluster (one of several is named: "AKS aks-platform-prod"), between two readings of its files and never at the first: the status file stopped answering or answers again; the collector stopped writing (the file became stale) or writes again; a node is no longer ready or is ready again; per pod one event a round at most: its restart count rose, or else it became unhealthy, or else it is ready again; Azure's verdict on the AKS service or its power state changed. A round names ten pods and counts the rest. | "ui in cmdemo3-tdd restarted (7 restarts): CrashLoopBackOff", "Node aks-…000000 is not ready", "The cluster's status file stopped answering: no answer within 10 s", "Azure's verdict on the AKS service: Available → Degraded" |
 
 The list is a `role="log"` region: additions are announced politely, and it scrolls inside its own frame. An event's
 level has a shape (check, warning triangle, cross, dots) next to its words.

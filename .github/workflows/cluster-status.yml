@@ -1,0 +1,138 @@
+# Azure's own facts about the system's two AKS clusters, for the health dashboard: scripts/write-cluster-status.ps1
+# reads, per cluster, whether it runs, Azure Resource Health's verdict, its node pools and its platform metrics, and
+# writes them in the format of the dashboard's aks.json. The result is <cluster>.json per cluster, the only files of
+# branch "status": one commit, replaced (force-pushed) by every run, so main gets no commits and the branch no
+# history. The dashboard reads them from the browser at
+# https://raw.githubusercontent.com/<org>/<repository>/status/<cluster>.json (deploy/topology.json,
+# clusters[].serviceUrl; the repository is public). These facts still arrive when a cluster is stopped: that is how
+# the page reads its environments as asleep instead of failed.
+# Every ten minutes (GitHub starts scheduled runs late under load, and serves the files from a cache of about five
+# minutes: the page shows how old the facts are, and stops trusting "Stopped" after 30 minutes), and on demand.
+# Credentials: GitHub OIDC to Azure (repository variables AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID;
+# the identity needs Reader on the two clusters), and this workflow's own token to push the branch. No stored secret.
+# While the variables are not set, a run reads nothing, publishes nothing and passes with a notice.
+name: cluster-status
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: cluster-status
+  cancel-in-progress: false
+
+env:
+  # <cluster>=<resource group>, one per line: the clusters of deploy/topology.json. A file is named after its cluster.
+  CLUSTERS: |
+    aks-platform-nonprod=rg-platform-nonprod-aks
+    aks-platform-prod=rg-platform-prod-aks
+  STATUS_BRANCH: status
+
+jobs:
+  cluster-status:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # The identity is someone's decision to make: until its three variables exist, this is a green run that says so.
+      - name: Is the Azure identity configured
+        id: identity
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            said="Repository variable(s) not set: ${missing[*]}. Nothing was read from Azure and nothing was published:"
+            said+=" the dashboard shows Azure's facts as not published and no environment as asleep."
+            said+=" See README.md, \"The publisher: workflow cluster-status\"."
+            echo "::notice title=cluster-status skipped::${said}"
+            echo "${said}" >> "$GITHUB_STEP_SUMMARY"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v6.0.1
+        if: steps.identity.outputs.configured == 'true'
+
+      - uses: azure/login@v3
+        if: steps.identity.outputs.configured == 'true'
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # A cluster that cannot be read keeps the file the branch has for it (its facts grow old, and the page says
+      # so) and fails the run in the last step; the other cluster's facts are published all the same.
+      - name: Write the facts of each cluster
+        if: steps.identity.outputs.configured == 'true'
+        id: facts
+        env:
+          FACTS: ${{ runner.temp }}/status
+        run: |
+          set -uo pipefail
+          mkdir -p "$FACTS"
+          git fetch --quiet --depth 1 origin "$STATUS_BRANCH" 2>/dev/null && previous=FETCH_HEAD || previous=
+          failed=()
+          while IFS='=' read -r cluster group; do
+            [ -n "$cluster" ] || continue
+            if ! pwsh -NoProfile -File scripts/write-cluster-status.ps1 -Name "$cluster" -ResourceGroup "$group" -Path "$FACTS/$cluster.json"; then
+              failed+=("$cluster")
+              rm -f "$FACTS/$cluster.json"
+              if [ -n "$previous" ] && git show "$previous:$cluster.json" > "$FACTS/$cluster.json" 2>/dev/null; then
+                echo "::warning title=cluster-status::$cluster could not be read: its last published facts are kept."
+              else
+                rm -f "$FACTS/$cluster.json"
+                echo "::warning title=cluster-status::$cluster could not be read, and the branch has no facts of it."
+              fi
+            fi
+          done <<< "$CLUSTERS"
+          echo "failed=${failed[*]}" >> "$GITHUB_OUTPUT"
+
+      # One commit without a parent, made from the files alone (no checkout of the branch), as github-actions[bot]
+      # with the token the checkout step kept.
+      - name: Publish on branch status
+        if: steps.identity.outputs.configured == 'true'
+        env:
+          FACTS: ${{ runner.temp }}/status
+          GIT_AUTHOR_NAME: "github-actions[bot]"
+          GIT_AUTHOR_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+          GIT_COMMITTER_NAME: "github-actions[bot]"
+          GIT_COMMITTER_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+        run: |
+          set -euo pipefail
+          entries=""
+          for file in "$FACTS"/*.json; do
+            [ -e "$file" ] || continue
+            jq --exit-status 'type == "object"' "$file" > /dev/null
+            entries+="$(printf '100644 blob %s\t%s' "$(git hash-object -w "$file")" "$(basename "$file")")"$'\n'
+          done
+          if [ -z "$entries" ]; then
+            echo "::error title=cluster-status::No cluster could be read: nothing to publish."
+            exit 1
+          fi
+          tree=$(printf '%s' "$entries" | git mktree)
+          commit=$(git commit-tree "$tree" -m "AKS facts of $(date --utc +%Y-%m-%dT%H:%M:%SZ)")
+          git push --quiet --force origin "$commit:refs/heads/$STATUS_BRANCH"
+          echo "Published on branch $STATUS_BRANCH ($commit):"
+          git ls-tree --name-only "$commit"
+
+      - name: Every cluster was read
+        if: steps.identity.outputs.configured == 'true'
+        env:
+          FAILED: ${{ steps.facts.outputs.failed }}
+        run: |
+          if [ -n "$FAILED" ]; then
+            echo "::error title=cluster-status::Not read: $FAILED"
+            exit 1
+          fi
